@@ -20,6 +20,7 @@ for (arg_observer_type* ob : observers_this_notification)\
 
 // TODO
 // Implement batch rendering
+// Control which corners are rounded
 
 namespace quickdraw
 {
