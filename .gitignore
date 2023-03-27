@@ -1,1 +1,3 @@
+.gitignore
 /.vs
+/x64
