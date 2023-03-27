@@ -168,30 +168,30 @@ class WindowTerminationObserver : public AbstractObserver
 public:
     virtual void on_window_termination() = 0;
 };
-/*
+
 bool AddWindowTerminationObserver(WindowTerminationObserver* ob);
 bool RemoveWindowTerminationObserver(WindowTerminationObserver* ob);
-*/
+
 class FrameObserver : public AbstractObserver
 {
 
 public:
     virtual void on_new_frame() = 0;
 };
-/*
+
 bool AddFrameObserver(FrameObserver* ob);
 bool RemoveFrameObserver(FrameObserver* ob);
-*/
+
 class WindowResizeObserver : public AbstractObserver
 {
 
 public:
     virtual void on_window_resize() = 0;
 };
-/*
+
 bool AddWindowResizeObserver(WindowResizeObserver* ob);
 bool RemoveWindowResizeObserver(WindowResizeObserver* ob);
-*/
+
 enum Axis
 {
     HORIZONTAL = 0,

@@ -42,7 +42,6 @@ bool IsValidTextureSize(const Vec2 &size)
     return IsValidSize(size) && size.x >= 1 && size.y >= 1;
 }
 
-constexpr window::TextureHandle INVALID_TEXTURE_HANDLE = 0;
 } // namespace
 
 void AbstractObserver::set_enabled(bool flag)
@@ -56,7 +55,10 @@ bool AbstractObserver::enabled()
 
 namespace window
 {
+namespace {
+    constexpr TextureHandle INVALID_TEXTURE_HANDLE = 0;
 
+}
 std::set<FrameObserver*> frame_observers;
 std::set<WindowResizeObserver*> window_resize_observers;
 std::set<WindowTerminationObserver*> window_termination_observers;
@@ -990,5 +992,31 @@ float GetTextHeight()
 {
     return text_scale * font_height;
 }
+
+bool AddWindowTerminationObserver(WindowTerminationObserver* ob)
+{
+    return window_termination_observers.insert(ob).second;
 }
-} 
+bool RemoveWindowTerminationObserver(WindowTerminationObserver* ob)
+{
+    return window_termination_observers.erase(ob);
+}
+bool AddFrameObserver(FrameObserver* ob)
+{
+    return frame_observers.insert(ob).second;
+}
+bool RemoveFrameObserver(FrameObserver* ob)
+{
+    return frame_observers.erase(ob);
+}
+bool AddWindowResizeObserver(WindowResizeObserver* ob)
+{
+    return window_resize_observers.insert(ob).second;
+}
+bool RemoveWindowResizeObserver(WindowResizeObserver* ob)
+{
+    return window_resize_observers.erase(ob);
+}
+}
+
+}
