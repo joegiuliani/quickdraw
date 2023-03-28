@@ -135,16 +135,16 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="quickdraw.h" />
+    <None Include="resources\quad.frag" />
+    <None Include="resources\quad.vert" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="demo.cpp" />
-    <ClCompile Include="glad.c" />
-    <ClCompile Include="quickdraw.cpp" />
+    <ClCompile Include="src\demo.cpp" />
+    <ClCompile Include="src\glad.c" />
+    <ClCompile Include="src\quickdraw.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="shape.frag" />
-    <None Include="shape.vert" />
+    <ClInclude Include="include\quickdraw.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

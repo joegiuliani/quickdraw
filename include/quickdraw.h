@@ -1,20 +1,15 @@
 #ifndef QUICKDRAW_QUICKDRAW_H_
 #define QUICKDRAW_QUICKDRAW_H_
 
-#include "include/glad/glad.h"
-#include "include/GLFW/glfw3native.h"
-#include "include/GLFW/glfw3.h"
-#include "include/glm/glm.hpp"
-#include "include/glm/vec2.hpp"
-#include "include/glm/vec4.hpp"
+#include "glad/glad.h"
+#include "GLFW/glfw3native.h"
+#include "GLFW/glfw3.h"
+#include "glm/glm.hpp"
+#include "glm/vec2.hpp"
+#include "glm/vec4.hpp"
 
-#include <functional>
-#include <map>
-#include <memory>
 #include <set>
-#include <stack>
 #include <string>
-#include <vector>
 
 namespace quickdraw
 {
@@ -147,9 +142,7 @@ constexpr int MOD_SUPER = GLFW_MOD_SUPER;
 constexpr int MOD_CAPS_LOCK = GLFW_MOD_CAPS_LOCK;
 constexpr int MOD_NUM_LOCK = GLFW_MOD_NUM_LOCK;
 
-// Represents an RGBA color
-// Color::x = Color[0] = R, Color::y = Color[1] = G, ...
-using Color = glm::vec4;
+using RGBA = glm::vec4;
 
 // signed (x,y) coordinates in pixels.
 using Vec2 = glm::vec2;
@@ -172,7 +165,6 @@ enum Axis
 
 namespace window
 {
-
     class WindowTerminationObserver : public AbstractObserver
     {
     public:
@@ -181,16 +173,6 @@ namespace window
 
     bool AddWindowTerminationObserver(WindowTerminationObserver* ob);
     bool RemoveWindowTerminationObserver(WindowTerminationObserver* ob);
-
-    class FrameObserver : public AbstractObserver
-    {
-
-    public:
-        virtual void on_new_frame() = 0;
-    };
-
-    bool AddFrameObserver(FrameObserver* ob);
-    bool RemoveFrameObserver(FrameObserver* ob);
 
     class WindowResizeObserver : public AbstractObserver
     {
@@ -213,14 +195,14 @@ enum ButtonState
 // Initializes a drawing context in a window with a specified name,
 // width, and height. Returns a non-zero value if there was an issue
 // during initialization.
-bool Init(const char *name, unsigned int width, unsigned int height);
+bool Init(const char* name, unsigned int width, unsigned int height);
 
 // Given a path, writes to output_handle and output_dimensions
 // If unable to load the texture, returns an invalid handle defined by TextureHandleIsValid()
 // File type can be anything supported by stbimage
 // output_dimensions may be nullptr
-TextureHandle LoadTexture(const char *input_path, Vec2 *output_dimensions);
-void UnloadTexture(TextureHandle *handle);
+TextureHandle LoadTexture(const char* input_path, Vec2* output_dimensions);
+void UnloadTexture(TextureHandle* handle);
 
 // Returns true if the value of the handle is valid for functions in this library
 bool TextureHandleIsValid(TextureHandle handle);
@@ -229,26 +211,27 @@ bool TextureHandleIsValid(TextureHandle handle);
 
 void SetWindowIcon(TextureHandle image);
 
-// Begins the event loop
-// Add a function to frameNotifier to execute inside the loop
-// window context terminates before run returns.
-void Run();
+// Updates frame information and polls input events
+void NewFrame();
+void Draw();
+bool ShouldClose();
+void Terminate();
 
-// Draws a rectangle with a specified position and size
-void DrawRect(const Vec2 &pos, const Vec2 &size);
+void DrawRect(const Vec2& pos, const Vec2& size);
 
 // Draws Text with a specified position
-void DrawText(const Vec2 &pos, const std::string &Text);
+/*
+void DrawText(const Vec2& pos, const std::string &Text);
 
 // Draws a path with specified vertices and thickness
 // This method draws a path with a specified thickness
 // A solid line is drawn between each point using a quad
 // points.size() cannot be less than 2
-void DrawPath(const std::vector<Vec2> &verts, float thickness, const Vec2 &offset);
+//void DrawPath(const std::vector<Vec2> &verts, float thickness, const Vec2& offset);
 
-void DrawImage(TextureHandle handle, const Vec2 &pos, const Vec2 &size);
-
-void StartScissor(const Vec2 &pos, const Vec2 &size);
+void DrawTexture(TextureHandle handle, const Vec2& pos, const Vec2& size);
+*/
+void StartScissor(const Vec2& pos, const Vec2& size);
 
 // Disables the scissor test
 void StopScissor();
@@ -337,26 +320,20 @@ int ScrollDir();
 
 namespace shader
 {
-    void SetOutline(const Color& start_color, const Color& end_color);
-    void SetFill(const Color& start_color, const Color& end_color);
+    enum VertexIndex
+    {
+        TOP_LEFT = 0,
+        TOP_RIGHT = 1,
+        BOTTOM_RIGHT = 2,
+        BOTTOM_LEFT = 3
+    };
 
-    // Sets the direction of outline to one of Axis
-    // Axis::HORIZONTAL = Left to Right
-    // Axis::VERTICAL = Top to Bottom
-    void SetOutlineDirection(Axis a);
-
-    // Sets the direction of fill to one of Axis
-    // Axis::HORIZONTAL = Left to Right
-    // Axis::VERTICAL = Top to Bottom
-    void SetFillDirection(Axis a);
-
-    // Sets the distance the header will extend from the top of rects
-    void SetHeaderDepth(float d);
-
-    // Sets the header color for rects
-    void SetHeaderColor(const Color& c);
-
-    // Sets the size of the corners of the rounded rectangle to be drawn
+    void SetFillColor(const RGBA& color, VertexIndex index);
+    void SetFillColor(const RGBA& color);
+    void SetOutlineColor(const RGBA& color, VertexIndex index);
+    void SetOutlineColor(const RGBA& color);
+    void SetRectCornerMask(bool mask, VertexIndex index);
+    void SetRectCornerMask(bool mask);
     void SetRectCornerSize(float size);
 
     // Sets the thickness of the outline of the rectangle to be drawn

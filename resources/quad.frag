@@ -1,34 +1,22 @@
 #version 450 compatibility
 
-in vec2 frag_pos;
-in vec2 frag_uv;
+in vec2 frag_vertex_pos;
+in vec2 frag_vertex_uv;
+in unsigned int frag_vertex_corner_mask;
+in vec4 frag_vertex_color;
+in vec4 frag_vertex_outline_color;
+flat in unsigned int frag_quad_mode;
+flat in vec2 frag_quad_pos;
+flat in vec2 frag_quad_size;
+flat in float frag_quad_outline_thickness;
+flat in unsigned int frag_quad_texture_id;
+flat in float frag_quad_corner_size;
+
 out vec4 color_out;
 
-/*
-	
-Eventually these are gonna be turned into vertex data
-and batch drawing will be implemented
-
-*/
-
-uniform vec4 fill_start;
-uniform vec4 fill_end;
-uniform int fill_direction;
-
-uniform vec4 outline_start;
-uniform vec4 outline_end;
-uniform int outline_direction;
-uniform float outline_thickness;
-
-uniform int mode;
-
 #define MODE_RECT 0
-uniform vec2 pos;
-uniform vec2 size;
-uniform float corner_size;
-uniform float header_depth;
-uniform vec4 header_color;
 
+/*
 #define MODE_IMAGE 1
 uniform sampler2D image;
 
@@ -38,7 +26,7 @@ uniform sampler2D image;
 uniform float path_thickness;
 uniform float path_length;
 uniform float curr_path_progress;
-uniform float next_path_progress;
+uniform float next_path_progress;*/
 
 bool in_bounds(float x, float mini, float maxi)
 {
@@ -51,8 +39,8 @@ float map(float value, float min1, float max1, float min2, float max2) {
 
 void main()
 {
-	vec4 color = mix(fill_start, fill_end, frag_uv[fill_direction]);
-
+	vec4 color = frag_vertex_color;
+	/*
 	if (mode == MODE_IMAGE)
 	{
 		color *= texture(image, frag_uv);
@@ -75,43 +63,37 @@ void main()
 			color = mix(fill_start, fill_end, frag_uv[0]*(next_path_progress-curr_path_progress)+curr_path_progress);
 		}
 	}
-	else if (mode == MODE_RECT)
+	else if (frag_quad_mode == MODE_RECT)
 	{
-		vec2 local_pos = (frag_pos-pos);
-		vec2 vert = round(frag_uv)*size; // Closest corner to fragment
-
-		if (local_pos.y < header_depth)
-		{
-			color = header_color;
-		}
+		vec2 local_pos = (frag_vertex_pos-frag_quad_pos);
+		vec2 vert = round(frag_vertex_uv)*frag_quad_size; // Closest vertex to fragment
 
 		// Drawing rounded corners
-		if (corner_size > 0 && !(in_bounds(local_pos.x, corner_size, size.x-corner_size) || in_bounds(local_pos.y, corner_size, size.y-corner_size)))
+		if (frag_vertex_corner_mask != 0 && !(in_bounds(local_pos.x, frag_quad_corner_size, frag_quad_size.x-frag_quad_corner_size) || in_bounds(local_pos.y, frag_quad_corner_size, frag_quad_size.y-frag_quad_corner_size)))
 		{
-			vec2 origin = vert - corner_size * (round(frag_uv)*2-1);
+			vec2 origin = vert - frag_quad_corner_size * (round(frag_vertex_uv)*2-1);
 			float dist = distance(local_pos, origin);
 
 			// Pixel is outside the rounded rect
-			if (dist > corner_size)
+			if (dist > frag_quad_corner_size)
 			{
 				discard;
 			}
 
 			// Pixel is in the outline
-			else if (dist > corner_size - outline_thickness)
+			else if (dist > frag_quad_corner_size - frag_quad_outline_thickness)
 			{
-				color = mix(outline_start, outline_end, frag_uv[outline_direction]);
+				color = frag_vertex_outline_color;
 			}
 		}
 		else
 		{
 			// Pixel is in the outline
-			if (distance(local_pos.y, vert.y) < outline_thickness || distance(local_pos.x, vert.x) < outline_thickness)
+			if (distance(local_pos.y, vert.y) < frag_quad_outline_thickness || distance(local_pos.x, vert.x) < frag_quad_outline_thickness)
 			{
-				color = mix(outline_start, outline_end, frag_uv[outline_direction]);
+				color = frag_vertex_outline_color;
 			}
 		}
-	}
-	
+	}*/
 	color_out = color;
 }
