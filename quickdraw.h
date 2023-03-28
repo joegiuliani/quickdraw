@@ -163,34 +163,6 @@ private:
     bool enabled_ = true;
 };
 
-class WindowTerminationObserver : public AbstractObserver
-{
-public:
-    virtual void on_window_termination() = 0;
-};
-
-bool AddWindowTerminationObserver(WindowTerminationObserver* ob);
-bool RemoveWindowTerminationObserver(WindowTerminationObserver* ob);
-
-class FrameObserver : public AbstractObserver
-{
-
-public:
-    virtual void on_new_frame() = 0;
-};
-
-bool AddFrameObserver(FrameObserver* ob);
-bool RemoveFrameObserver(FrameObserver* ob);
-
-class WindowResizeObserver : public AbstractObserver
-{
-
-public:
-    virtual void on_window_resize() = 0;
-};
-
-bool AddWindowResizeObserver(WindowResizeObserver* ob);
-bool RemoveWindowResizeObserver(WindowResizeObserver* ob);
 
 enum Axis
 {
@@ -200,6 +172,36 @@ enum Axis
 
 namespace window
 {
+
+    class WindowTerminationObserver : public AbstractObserver
+    {
+    public:
+        virtual void on_window_termination() = 0;
+    };
+
+    bool AddWindowTerminationObserver(WindowTerminationObserver* ob);
+    bool RemoveWindowTerminationObserver(WindowTerminationObserver* ob);
+
+    class FrameObserver : public AbstractObserver
+    {
+
+    public:
+        virtual void on_new_frame() = 0;
+    };
+
+    bool AddFrameObserver(FrameObserver* ob);
+    bool RemoveFrameObserver(FrameObserver* ob);
+
+    class WindowResizeObserver : public AbstractObserver
+    {
+
+    public:
+        virtual void on_window_resize() = 0;
+    };
+
+    bool AddWindowResizeObserver(WindowResizeObserver* ob);
+    bool RemoveWindowResizeObserver(WindowResizeObserver* ob);
+
 using TextureHandle = GLuint;
 
 enum ButtonState
@@ -223,7 +225,7 @@ void UnloadTexture(TextureHandle *handle);
 // Returns true if the value of the handle is valid for functions in this library
 bool TextureHandleIsValid(TextureHandle handle);
 
-// TODO add back Scissor functionality for objdraw font shadows
+// TODO add scissor functionality for font shadows
 
 void SetWindowIcon(TextureHandle image);
 
@@ -251,7 +253,7 @@ void StartScissor(const Vec2 &pos, const Vec2 &size);
 // Disables the scissor test
 void StopScissor();
 
-// Returns a time in seconds
+// Returns the time in seconds
 double Time();
 
 // Returns the duration of time since the start of the last frame in seconds
@@ -260,7 +262,7 @@ double DeltaTime();
 // Returns the number of frames since the start of the program so that
 // 0 is returned during the first frame.
 //
-// May return a negative number so that the previous frame number is
+// A negative number may be returned that the previous frame number is
 // always less than the current
 int FrameNumber();
 
@@ -278,10 +280,10 @@ public:
     virtual void on_mouse_release() = 0;
     virtual void on_mouse_scroll() = 0;
 };
-/*
+
 bool AddObserver(Observer* ob);
 bool RemoveObserver(Observer* ob);
-*/
+
 enum Cursor
 {
     ARROW = GLFW_ARROW_CURSOR,
@@ -292,7 +294,6 @@ enum Cursor
     VRESIZE = GLFW_VRESIZE_CURSOR
 };
 
-// Sets the cursor to one of Cursor
 void SetCursor(Cursor cursor);
 
 // Shows/hides the cursor when inside the window
@@ -314,16 +315,12 @@ bool IsPressed();
 // Returns whether any of the mouse buttons are released
 bool IsReleased();
 
-// Returns whether a specified mouse button is down
 bool IsDown(Button b);
 
-// Returns whether a specified mouse button is pressed
 bool IsPressed(Button b);
 
-// Returns whether a specified mouse button is released
 bool IsReleased(Button b);
 
-// Returns whether the mouse is moving
 bool IsMoving();
 
 // Returns the difference between the current position and the
@@ -335,42 +332,43 @@ Vec2 Pos();
 
 // Returns -1, 0, or 1
 int ScrollDir();
+
 } // namespace mouse
 
 namespace shader
 {
-void SetOutline(const Color &start_color, const Color &end_color);
-void SetFill(const Color &start_color, const Color &end_color);
+    void SetOutline(const Color& start_color, const Color& end_color);
+    void SetFill(const Color& start_color, const Color& end_color);
 
-// Sets the direction of outline to one of Axis
-// Axis::HORIZONTAL = Left to Right
-// Axis::VERTICAL = Top to Bottom
-void SetOutlineDirection(Axis a);
+    // Sets the direction of outline to one of Axis
+    // Axis::HORIZONTAL = Left to Right
+    // Axis::VERTICAL = Top to Bottom
+    void SetOutlineDirection(Axis a);
 
-// Sets the direction of fill to one of Axis
-// Axis::HORIZONTAL = Left to Right
-// Axis::VERTICAL = Top to Bottom
-void SetFillDirection(Axis a);
+    // Sets the direction of fill to one of Axis
+    // Axis::HORIZONTAL = Left to Right
+    // Axis::VERTICAL = Top to Bottom
+    void SetFillDirection(Axis a);
 
-// Sets the distance the header will extend from the top of rects
-void SetHeaderDepth(float d);
+    // Sets the distance the header will extend from the top of rects
+    void SetHeaderDepth(float d);
 
-// Sets the header color for rects
-void SetHeaderColor(const Color &c);
+    // Sets the header color for rects
+    void SetHeaderColor(const Color& c);
 
-// Sets the size of the corners of the rounded rectangle to be drawn
-void SetRectCornerSize(float size);
+    // Sets the size of the corners of the rounded rectangle to be drawn
+    void SetRectCornerSize(float size);
 
-// Sets the thickness of the outline of the rectangle to be drawn
-void SetOutlineThickness(float thickness);
+    // Sets the thickness of the outline of the rectangle to be drawn
+    void SetOutlineThickness(float thickness);
 
-// Sets the scale of Text. Make sure to set the desired Text scale before
-// calling TextSize(...)
-void SetTextScale(float s);
+    // Sets the scale of Text. Make sure to set the desired Text scale before
+    // calling TextSize(...)
+    void SetTextScale(float s);
 
-// Returns the size of the bounding box of str if it were drawn on the screen.
-// Make sure to set the desired Text scale before calling this method.
-Vec2 TextSize(const std::string &str);
+    // Returns the size of the bounding box of str if it were drawn on the screen.
+    // Make sure to set the desired Text scale before calling this method.
+    Vec2 TextSize(const std::string& str);
 } // namespace shader
 
 namespace keyboard
@@ -382,10 +380,10 @@ class Observer : public AbstractObserver
 public:
     virtual void on_keyboard_press() = 0;
 };
-/*
+
 bool AddObserver(Observer* ob);
 bool RemoveObserver(Observer* ob);
-*/
+
 int KeyModifiers();
 const std::set<int> &DownKeys();
 } // namespace keyboard

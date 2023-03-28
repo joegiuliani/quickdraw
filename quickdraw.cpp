@@ -22,6 +22,9 @@ for (arg_observer_type* ob : observers_this_notification)\
 // Implement batch rendering
 // Control which corners are rounded
 
+
+
+
 namespace quickdraw
 {
 
@@ -42,6 +45,23 @@ bool IsValidTextureSize(const Vec2 &size)
     return IsValidSize(size) && size.x >= 1 && size.y >= 1;
 }
 
+/*
+    Vertex Properties:
+    Pos - 2 floats
+    UV - 2 floats
+    Corner - 1 float
+    Color - 4 floats
+    Outline Color - 4 floats
+
+    Shape Properties
+    Mode
+    Outline Thickness
+
+*/
+
+// Shape Properties:
+
+
 } // namespace
 
 void AbstractObserver::set_enabled(bool flag)
@@ -55,10 +75,10 @@ bool AbstractObserver::enabled()
 
 namespace window
 {
-namespace {
+namespace
+{
     constexpr TextureHandle INVALID_TEXTURE_HANDLE = 0;
-
-}
+} // namespace
 std::set<FrameObserver*> frame_observers;
 std::set<WindowResizeObserver*> window_resize_observers;
 std::set<WindowTerminationObserver*> window_termination_observers;
@@ -150,7 +170,7 @@ void glfwErrorCallback(int error, const char *description);
 float GetTextWidth(const std::string &Text);
 float GetTextHeight();
 void DrawQuad(const Vec2 &top_left, const Vec2 &top_right, const Vec2 &bottom_right, const Vec2 &bottom_left);
-int LoadFont(const char *path);
+bool LoadFont(const char *path);
 void InitShape();
 
 namespace mouse
@@ -254,6 +274,16 @@ int ScrollDir()
     return scroll_state.current;
 }
 
+bool AddObserver(Observer* ob)
+{
+    return observers.insert(ob).second;
+}
+
+bool RemoveObserver(Observer* ob)
+{
+    return observers.erase(ob);
+}
+
 void SetCursor(Cursor cursor)
 {
     glfwSetCursor(window_ptr, cursor_ptrs[cursor - ARROW]);
@@ -336,6 +366,16 @@ void KeyCallback(GLFWwindow *window_ptr, int key, int scancode, int action, int 
     }
 }
 
+bool AddObserver(Observer* ob)
+{
+    return observers.insert(ob).second;
+}
+
+bool RemoveObserver(Observer* ob)
+{
+    return observers.erase(ob);
+}
+
 int KeyModifiers()
 {
     return key_mods;
@@ -345,6 +385,9 @@ int KeyModifiers()
 namespace shader
 {
 gradient curr_outline, curr_fill;
+
+GLuint mode_loc, outline_thickness_loc;
+
 enum Mode
 {
     RECT,
@@ -425,6 +468,11 @@ void Init(const std::string &vert_path, const std::string &frag_path)
 
     glDeleteShader(vertex);
     glDeleteShader(fragment);
+
+    glUseProgram(ID);
+    mode_loc = glGetUniformLocation(ID, "mode");
+    outline_thickness_loc = glGetUniformLocation(ID, "outline_thickness");
+
 }
 void Activate()
 {
@@ -453,7 +501,7 @@ void SetColor(const std::string &name, const Color &color)
 }
 void SetMode(Mode m)
 {
-    SetInt("mode", m);
+    glUniform1i(mode_loc, m);
 }
 void SetFill(const Color &start_color, const Color &end_color)
 {
@@ -502,7 +550,7 @@ void SetRectCornerSize(float size)
 }
 void SetOutlineThickness(float thickness)
 {
-    SetFloat("outline_thickness", thickness);
+    glUniform1f(outline_thickness_loc, thickness);
 }
 void SetHeaderDepth(float d)
 {
@@ -581,7 +629,7 @@ bool Init(const char *name, unsigned int width, unsigned int height)
     glEnable(GL_MULTISAMPLE);
     glActiveTexture(GL_TEXTURE0);
 
-    if (LoadFont("C:\\Windows\\Fonts\\segoeuil.ttf"))
+    if (!LoadFont("C:\\Windows\\Fonts\\segoeuil.ttf"))
     {
         return false;
     }
@@ -867,21 +915,21 @@ int FrameNumber()
 {
     return frame_number;
 }
-int LoadFont(const char *path)
+bool LoadFont(const char *path)
 {
     FT_Library ft;
 
     if (FT_Init_FreeType(&ft))
     {
         std::cout << "Failed to initalize FreeType\n";
-        return -1;
+        return false;
     }
 
     FT_Face face;
     if (FT_New_Face(ft, path, 0, &face))
     {
         std::cout << "Failed to load " << path << '\n';
-        return -1;
+        return false;
     }
     else
     {
@@ -889,17 +937,15 @@ int LoadFont(const char *path)
 
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
-        // Load readable characters
+        // Load displayable characters
         for (unsigned char c = 0; c < 128; c++)
         {
-            // Load character glyph
             if (FT_Load_Char(face, c, FT_LOAD_RENDER))
             {
-                std::cout << "Failed to load glyph for \'" << c << "\'\n";
+                std::cout << "Failed to load \'" << c << "\'\n";
                 continue;
             }
 
-            // generate texture
             unsigned int font_texture;
             glGenTextures(1, &font_texture);
             glBindTexture(GL_TEXTURE_2D, font_texture);
@@ -909,12 +955,10 @@ int LoadFont(const char *path)
 
             );
 
-            // set texture options
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            // now store character for later use
             Glyph glyph = {font_texture, Vec2(face->glyph->bitmap.width, face->glyph->bitmap.rows) * font_import_scale,
                            Vec2(face->glyph->bitmap_left, face->glyph->bitmap_top) * font_import_scale,
                            (face->glyph->advance.x * advance_fac + 3) * font_import_scale};
@@ -938,7 +982,7 @@ int LoadFont(const char *path)
     FT_Done_Face(face);
     FT_Done_FreeType(ft);
 
-    return 0;
+    return true;
 }
 void InitShape()
 {
@@ -1001,10 +1045,7 @@ bool RemoveWindowTerminationObserver(WindowTerminationObserver* ob)
 {
     return window_termination_observers.erase(ob);
 }
-bool AddFrameObserver(FrameObserver* ob)
-{
-    return frame_observers.insert(ob).second;
-}
+
 bool RemoveFrameObserver(FrameObserver* ob)
 {
     return frame_observers.erase(ob);
@@ -1016,6 +1057,10 @@ bool AddWindowResizeObserver(WindowResizeObserver* ob)
 bool RemoveWindowResizeObserver(WindowResizeObserver* ob)
 {
     return window_resize_observers.erase(ob);
+}
+bool AddFrameObserver(FrameObserver* ob)
+{
+    return frame_observers.insert(ob).second;
 }
 }
 

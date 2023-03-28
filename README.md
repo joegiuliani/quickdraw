@@ -8,4 +8,4 @@ Windows 10
 The goal of this project is to provide a quick drawing API as a basis for other projects which require a GUI.
 
 # Features
-Rounded corners, text, image textures, curves, outlines, gradients, window/mouse/keyboard observers
+Rounded corners, scaleable text, scaleable image textures, curves, outlines, gradients, window/mouse/keyboard observers
