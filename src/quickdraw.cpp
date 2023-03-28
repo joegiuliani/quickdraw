@@ -100,8 +100,8 @@ namespace
         GLuint mode = RECT_MODE;
         Vec2 pos = Vec2(0);
         Vec2 size = Vec2(0);
-        float outline_thickness = 1;
-        float corner_size = 1;
+        GLfloat outline_thickness = 1;
+        GLfloat corner_size = 1;
         GLuint texture_id = 0;
     };
     QuadAttribs curr_quad_attribs;
@@ -567,7 +567,6 @@ namespace
         glVertexAttribPointer(vertex_outline_color_loc, 4, GL_FLOAT, GL_FALSE, sizeof(VertexAttribs), (void*)offsetof(VertexAttribs, VertexAttribs::outline_color));
 
         glBindBuffer(GL_ARRAY_BUFFER, quad_attribs_vbo);
-
         GLuint quad_mode_loc = glGetAttribLocation(PROGRAM_ID, "quad_mode");
         glEnableVertexAttribArray(quad_mode_loc);
         glVertexAttribIPointer(quad_mode_loc, 1, GL_UNSIGNED_INT, sizeof(QuadAttribs), (void*)offsetof(QuadAttribs, QuadAttribs::mode));
@@ -777,12 +776,11 @@ void Draw()
 {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glDisable(GL_DEPTH_TEST);
     glEnable(GL_MULTISAMPLE);
-    glActiveTexture(GL_TEXTURE0);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_STENCIL_TEST);
     glDisable(GL_SCISSOR_TEST);
+    glActiveTexture(GL_TEXTURE0);
 
     shader::Activate();
     glBindVertexArray(quad_vao);
