@@ -9,6 +9,7 @@
 #include <sstream>
 #include <vector>
 #include <filesystem>
+#include <array>
 
 #define QUICKDRAW_NOTIFY_OBSERVERS(arg_observer_type, arg_observers, arg_member_function) \
 {\
@@ -70,7 +71,6 @@ namespace
     float font_offset = 0;
     float font_height = 0;
     float font_line_distance = 1;
-    float text_scale = 24;
     GLFWwindow* window_ptr = nullptr;
     Vec2 viewport_dim(640, 480);
     double last_time = 0;
@@ -83,8 +83,9 @@ namespace
 
     constexpr GLuint RECT_MODE = 0;
     // constexpr GLuint TEXTURE_MODE = 1, FONT_MODE = 2, PATH_MODE = 3;
-    GLuint quad_vao, vertex_attribs_vbo, quad_attribs_vbo;
-    const GLuint NUM_QUAD_ELEMENTS = 4;
+    GLuint quad_vao, vertex_attribs_vbo, vertex_ebo, quad_attribs_ubo;
+    GLuint BASE_VERTEX_ELEMS[6]{ 2, 1, 0, 2, 0, 3 };
+
 
     struct VertexAttribs
     {
@@ -95,19 +96,12 @@ namespace
         RGBA outline_color = RGBA(1, 0, 1, 1);
     };
     VertexAttribs curr_vertex_attribs[4];
-    struct QuadAttribs
-    {
-        GLuint mode = RECT_MODE;
-        Vec2 pos = Vec2(0);
-        Vec2 size = Vec2(0);
-        GLfloat outline_thickness = 1;
-        GLfloat corner_size = 1;
-        GLuint texture_id = 0;
-    };
+    using QuadAttribs = std::array<Vec2, 4>;
     QuadAttribs curr_quad_attribs;
-
     std::vector<QuadAttribs> quads_to_draw;
     std::vector<VertexAttribs> vertices_to_draw;
+    std::vector<GLuint> vertex_elements_to_draw;
+    int last_number_of_quads = 0;
 
     void glfwErrorCallback(int error, const char* description)
     {
@@ -132,6 +126,11 @@ namespace
         curr_vertex_attribs[BOTTOM_LEFT].uv = Vec2(0, 1);
         curr_vertex_attribs[BOTTOM_LEFT].pos = vertex_positions[BOTTOM_LEFT];
         vertices_to_draw.push_back(curr_vertex_attribs[BOTTOM_LEFT]);
+
+        for (int k = 0; k < 6; k++)
+        {
+            vertex_elements_to_draw.push_back(BASE_VERTEX_ELEMS[k] + quads_to_draw.size() * 6);
+        }
 
         quads_to_draw.push_back(curr_quad_attribs);
     }
@@ -256,8 +255,6 @@ bool TextureHandleIsValid(TextureHandle handle)
 {
     return handle != INVALID_TEXTURE_HANDLE;
 }
-float GetTextWidth(const std::string &Text);
-float GetTextHeight();
 
 namespace mouse
 {   
@@ -450,8 +447,9 @@ namespace shader
 {
 namespace
 {
-    GLuint transform_loc;
-    unsigned int PROGRAM_ID;
+    float curr_text_scale = 24;
+    GLuint TRANSFORM_LOC, PROGRAM_ID, UNIFORM_BIND_INDEX;
+
     bool Init(const std::filesystem::path& vert_path, const std::filesystem::path& frag_path)
     {
         // Load shader program
@@ -532,16 +530,18 @@ namespace
 
         glDeleteShader(vertex);
         glDeleteShader(fragment);
-
         glUseProgram(PROGRAM_ID);
-        transform_loc = glGetUniformLocation(PROGRAM_ID, "transform");
+
+        TRANSFORM_LOC = glGetUniformLocation(PROGRAM_ID, "transform");
+
+        UNIFORM_BIND_INDEX = glGetUniformBlockIndex(PROGRAM_ID, "Quads");
+        glUniformBlockBinding(PROGRAM_ID, UNIFORM_BIND_INDEX, 0);
 
         glGenVertexArrays(1, &quad_vao);
         glBindVertexArray(quad_vao);
-
         glGenBuffers(1, &vertex_attribs_vbo);
-        glGenBuffers(1, &quad_attribs_vbo);
         glBindBuffer(GL_ARRAY_BUFFER, vertex_attribs_vbo);
+        glGenBuffers(1, &quad_attribs_ubo);
 
         // Specify the vertex attribute layout
         GLuint vertex_pos_loc = glGetAttribLocation(PROGRAM_ID, "vertex_pos");
@@ -566,42 +566,10 @@ namespace
         glEnableVertexAttribArray(vertex_outline_color_loc);
         glVertexAttribPointer(vertex_outline_color_loc, 4, GL_FLOAT, GL_FALSE, sizeof(VertexAttribs), (void*)offsetof(VertexAttribs, VertexAttribs::outline_color));
 
-        glBindBuffer(GL_ARRAY_BUFFER, quad_attribs_vbo);
-        GLuint quad_mode_loc = glGetAttribLocation(PROGRAM_ID, "quad_mode");
-        glEnableVertexAttribArray(quad_mode_loc);
-        glVertexAttribIPointer(quad_mode_loc, 1, GL_UNSIGNED_INT, sizeof(QuadAttribs), (void*)offsetof(QuadAttribs, QuadAttribs::mode));
-        glVertexAttribDivisor(quad_mode_loc, 1); // one mode per quad
-
-        GLuint quad_pos_loc = glGetAttribLocation(PROGRAM_ID, "quad_pos");
-        glEnableVertexAttribArray(quad_pos_loc);
-        glVertexAttribPointer(quad_pos_loc, 2, GL_FLOAT, GL_FALSE, sizeof(QuadAttribs), (void*)offsetof(QuadAttribs, QuadAttribs::pos));
-        glVertexAttribDivisor(quad_pos_loc, 1); // one pos per quad
-
-        GLuint quad_size_loc = glGetAttribLocation(PROGRAM_ID, "quad_size");
-        glEnableVertexAttribArray(quad_size_loc);
-        glVertexAttribPointer(quad_size_loc, 2, GL_FLOAT, GL_FALSE, sizeof(QuadAttribs), (void*)offsetof(QuadAttribs, QuadAttribs::size));
-        glVertexAttribDivisor(quad_size_loc, 1); // one size per quad
-
-        GLuint quad_outline_thickness_loc = glGetAttribLocation(PROGRAM_ID, "quad_outline_thickness");
-        glEnableVertexAttribArray(quad_outline_thickness_loc);
-        glVertexAttribPointer(quad_outline_thickness_loc, 1, GL_FLOAT, GL_FALSE, sizeof(QuadAttribs), (void*)offsetof(QuadAttribs, QuadAttribs::outline_thickness));
-        glVertexAttribDivisor(quad_outline_thickness_loc, 1); // one outline thickness per quad
-
-        GLuint quad_texture_id_loc = glGetAttribLocation(PROGRAM_ID, "quad_texture_id");
-        glEnableVertexAttribArray(quad_texture_id_loc);
-        glVertexAttribIPointer(quad_texture_id_loc, 1, GL_UNSIGNED_INT, sizeof(QuadAttribs), (void*)offsetof(QuadAttribs, QuadAttribs::texture_id));
-        glVertexAttribDivisor(quad_texture_id_loc, 1); // one texture_id per quad
-
-        GLuint quad_corner_size_loc = glGetAttribLocation(PROGRAM_ID, "quad_corner_size");
-        glEnableVertexAttribArray(quad_corner_size_loc);
-        glVertexAttribPointer(quad_corner_size_loc, 1, GL_FLOAT, GL_FALSE, sizeof(QuadAttribs), (void*)offsetof(QuadAttribs, QuadAttribs::corner_size));
-        glVertexAttribDivisor(quad_corner_size_loc, 1); // one corner_size per quad
-
-        GLuint quad_ebo_loc;
-        glGenBuffers(1, &quad_ebo_loc);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad_ebo_loc);
+        glGenBuffers(1, &vertex_ebo);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vertex_ebo);
         const int NUM_QUAD_ELEMS = 6;
-        GLuint quad_elems[NUM_QUAD_ELEMS]{ 2, 1, 0, 2, 0, 3 };
+        GLuint quad_elems[NUM_QUAD_ELEMS]{ 2, 1, 0, 2, 0, 3};
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLuint) * NUM_QUAD_ELEMS, quad_elems, GL_STATIC_DRAW);
 
         return true;
@@ -650,19 +618,33 @@ void SetRectCornerMask(bool mask)
 }
 void SetRectCornerSize(float size)
 {
-    curr_quad_attribs.corner_size = size;
+    curr_quad_attribs[3][1] = size;
 }
 void SetOutlineThickness(float thickness)
 {
-    curr_quad_attribs.corner_size = thickness;
+    curr_quad_attribs[3][0] = thickness;
 }
+float GetTextWidth(const std::string& Text)
+{
+    float ret = 0;
+    for (const char& c : Text)
+    {
+        ret += glyphs[(size_t)c].advance;
+    }
+    return ret * curr_text_scale;
+}
+float GetTextHeight()
+{
+    return curr_text_scale * font_height;
+}
+
 Vec2 TextSize(const std::string& str)
 {
     return Vec2(GetTextWidth(str), GetTextHeight());
 }
 void SetTextScale(float s)
 {
-    text_scale = s;
+    curr_text_scale = s;
 }
 } // namespace shader
 
@@ -673,7 +655,7 @@ void WindowSizeCallback(GLFWwindow *window_ptr, int width, int height)
 
     shader::Activate();
     Vec2 transform = Vec2(1.0f / (viewport_dim - 1.0f));
-    glUniform2fv(shader::transform_loc, 2, &transform[0]);
+    glUniform2fv(shader::TRANSFORM_LOC, 1, &transform[0]);
 
     QUICKDRAW_NOTIFY_OBSERVERS(WindowResizeObserver, window_resize_observers, on_window_resize);
 }
@@ -772,7 +754,7 @@ void NewFrame()
     cursor_update_received = false;
     mouse_button_update_received = false;
 }
-void Draw()
+void DrawFrame()
 {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -783,15 +765,33 @@ void Draw()
     glActiveTexture(GL_TEXTURE0);
 
     shader::Activate();
-    glBindVertexArray(quad_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, vertex_attribs_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(VertexAttribs) * vertices_to_draw.size(), vertices_to_draw.data(), GL_DYNAMIC_DRAW);
-    glBindBuffer(GL_ARRAY_BUFFER, quad_attribs_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(QuadAttribs) * quads_to_draw.size(), quads_to_draw.data(), GL_DYNAMIC_DRAW);
-    glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, quads_to_draw.size());
 
+    int number_of_quads = quads_to_draw.size();
+
+    if (number_of_quads > last_number_of_quads)
+    {
+        glBindBuffer(GL_ARRAY_BUFFER, vertex_attribs_vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(VertexAttribs) * vertices_to_draw.size(), vertices_to_draw.data(), GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vertex_ebo);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLuint) * vertex_elements_to_draw.size(), vertex_elements_to_draw.data(), GL_STATIC_DRAW);
+    }
+    else
+    {
+        glBindBuffer(GL_ARRAY_BUFFER, vertex_attribs_vbo);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(VertexAttribs) * vertices_to_draw.size(), vertices_to_draw.data());
+    }
+   
+    glBindBuffer(GL_UNIFORM_BUFFER, quad_attribs_ubo);
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(QuadAttribs) * quads_to_draw.size(), quads_to_draw.data(), GL_DYNAMIC_DRAW);
+    glBindBufferBase(GL_UNIFORM_BUFFER, shader::UNIFORM_BIND_INDEX, quad_attribs_ubo);
+
+    glBindVertexArray(quad_vao);
+    glDrawElements(GL_TRIANGLES, number_of_quads * 6, GL_UNSIGNED_INT, 0);
+
+    last_number_of_quads = number_of_quads;
     quads_to_draw.clear();
     vertices_to_draw.clear();
+    vertex_elements_to_draw.clear();
 
     glfwSwapBuffers(window_ptr);
     glClearColor(0.5, 0.5, 0.5, 1.0f);
@@ -824,10 +824,9 @@ void DrawRect(const Vec2& pos, const Vec2& size)
 {
     using namespace shader;
 
-    curr_quad_attribs.mode = RECT_MODE;
-    curr_quad_attribs.pos = pos;
-    curr_quad_attribs.size = size;
-
+    curr_quad_attribs[2][0] = RECT_MODE;
+    curr_quad_attribs[0] = pos;
+    curr_quad_attribs[1] = size;
     Vec2 vertices[4] = { pos + size * Vec2(0,0), pos + size * Vec2(1,0), pos + size * Vec2(1,1), pos + size * Vec2(0,1) };
     DrawQuad(vertices);
 }
@@ -1029,19 +1028,6 @@ Vec2 ViewportSize()
 int FrameNumber()
 {
     return frame_number;
-}
-float GetTextWidth(const std::string &Text)
-{
-    float ret = 0;
-    for (const char &c : Text)
-    {
-        ret += glyphs[(size_t)c].advance;
-    }
-    return ret * text_scale;
-}
-float GetTextHeight()
-{
-    return text_scale * font_height;
 }
 bool AddWindowTerminationObserver(WindowTerminationObserver* ob)
 {

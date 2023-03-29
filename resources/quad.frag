@@ -1,6 +1,7 @@
 #version 450 compatibility
 
 in vec2 frag_vertex_pos;
+
 in vec2 frag_vertex_uv;
 in unsigned int frag_vertex_corner_mask;
 in vec4 frag_vertex_color;
@@ -39,7 +40,7 @@ float map(float value, float min1, float max1, float min2, float max2) {
 
 void main()
 {
-	vec4 color = frag_vertex_color;
+	//vec4 color = frag_vertex_color;
 	/*
 	if (mode == MODE_IMAGE)
 	{
@@ -95,5 +96,5 @@ void main()
 			}
 		}
 	}*/
-	color_out = color;
+	color_out = frag_vertex_color;
 }

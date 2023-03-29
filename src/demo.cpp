@@ -15,7 +15,11 @@ int main()
 		shader::SetFillColor(RGBA(1));
 		DrawRect(Vec2(50), Vec2(100));
 
-		Draw();
+		shader::SetFillColor(RGBA(1,0,0,1));
+		DrawRect(Vec2(500, 50), Vec2(50));
+
+
+		DrawFrame();
 	}
 
 	Terminate();

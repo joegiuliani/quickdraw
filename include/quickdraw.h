@@ -213,7 +213,7 @@ void SetWindowIcon(TextureHandle image);
 
 // Updates frame information and polls input events
 void NewFrame();
-void Draw();
+void DrawFrame();
 bool ShouldClose();
 void Terminate();
 
