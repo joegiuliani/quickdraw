@@ -84,12 +84,6 @@ void main()
 		vec2 local_frag_pos = (frag_pos-quad_pos());
 		vec2 local_vert_pos = round(frag_uv)*quad_size(); // Closest vertex to fragment
 
-		// If the fragment does not lie on the outline
-		if (in_bounds(local_frag_pos.x, quad_rect_corner_size(), quad_size().x-quad_rect_corner_size()) && in_bounds(local_frag_pos.y, quad_rect_corner_size(), quad_size().y-quad_rect_corner_size()))
-		{
-
-		}
-
 		if (round(frag_corner_mask) != 0 && !(in_bounds(local_frag_pos.x, quad_rect_corner_size(), quad_size().x-quad_rect_corner_size()) || in_bounds(local_frag_pos.y, quad_rect_corner_size(), quad_size().y-quad_rect_corner_size())))
 		{
 			vec2 origin = local_vert_pos - quad_rect_corner_size() * (round(frag_uv)*2-1);
