@@ -83,26 +83,34 @@ namespace
 
     constexpr GLuint RECT_MODE = 0;
     // constexpr GLuint TEXTURE_MODE = 1, FONT_MODE = 2, PATH_MODE = 3;
-    GLuint quad_vao, vertex_attribs_vbo, vertex_ebo, quad_attribs_ubo;
+    GLuint quad_vao, vertex_dynamic_attribs_vbo, vertex_static_attribs_vbo, vertex_ebo, quad_attribs_ssbo;
     GLuint BASE_VERTEX_ELEMS[6]{ 2, 1, 0, 2, 0, 3 };
 
-
-    struct VertexAttribs
+    struct DynamicVertexAttribs
     {
         Vec2 pos = Vec2(0);
-        Vec2 uv = Vec2(0);
-        GLuint corner_mask = 1;
+        GLfloat corner_mask = 1;
         RGBA fill_color = RGBA(1, 0, 1, 1);
         RGBA outline_color = RGBA(1, 0, 1, 1);
     };
-    VertexAttribs curr_vertex_attribs[4];
-    using QuadAttribs = std::array<Vec2, 4>;
-    QuadAttribs curr_quad_attribs;
-    std::vector<QuadAttribs> quads_to_draw;
-    std::vector<VertexAttribs> vertices_to_draw;
+    struct StaticVertexAttribs
+    {
+        Vec2 uv = Vec2(0);
+        GLuint quad_index = 0;
+        StaticVertexAttribs(const Vec2& t_uv, GLuint t_quad_index):uv(t_uv),quad_index(t_quad_index)
+        {
+        }
+    };
+    DynamicVertexAttribs curr_vertex_attribs[4];
+    std::vector<DynamicVertexAttribs> vertex_dynamic_attribs_to_draw;
+    std::vector<StaticVertexAttribs> vertex_static_attribs_to_draw;
     std::vector<GLuint> vertex_elements_to_draw;
-    int last_number_of_quads = 0;
+    std::vector<float> quads_attribs_to_draw;
+    float curr_quad_attribs[8];
 
+    size_t max_number_of_quads;
+    
+    int last_number_of_quads = 0;
     void glfwErrorCallback(int error, const char* description)
     {
         fprintf(stderr, "Glfw Error %d: %s\n", error, description);
@@ -111,28 +119,20 @@ namespace
     {
         using namespace shader;
 
-        curr_vertex_attribs[TOP_LEFT].uv = Vec2(0, 0);
         curr_vertex_attribs[TOP_LEFT].pos = vertex_positions[TOP_LEFT];
-        vertices_to_draw.push_back(curr_vertex_attribs[TOP_LEFT]);
+        vertex_dynamic_attribs_to_draw.push_back(curr_vertex_attribs[TOP_LEFT]);
 
-        curr_vertex_attribs[TOP_RIGHT].uv = Vec2(1, 0);
         curr_vertex_attribs[TOP_RIGHT].pos = vertex_positions[TOP_RIGHT];
-        vertices_to_draw.push_back(curr_vertex_attribs[TOP_RIGHT]);
+        vertex_dynamic_attribs_to_draw.push_back(curr_vertex_attribs[TOP_RIGHT]);
 
-        curr_vertex_attribs[BOTTOM_RIGHT].uv = Vec2(1, 1);
         curr_vertex_attribs[BOTTOM_RIGHT].pos = vertex_positions[BOTTOM_RIGHT];
-        vertices_to_draw.push_back(curr_vertex_attribs[BOTTOM_RIGHT]);
+        vertex_dynamic_attribs_to_draw.push_back(curr_vertex_attribs[BOTTOM_RIGHT]);
 
-        curr_vertex_attribs[BOTTOM_LEFT].uv = Vec2(0, 1);
         curr_vertex_attribs[BOTTOM_LEFT].pos = vertex_positions[BOTTOM_LEFT];
-        vertices_to_draw.push_back(curr_vertex_attribs[BOTTOM_LEFT]);
+        vertex_dynamic_attribs_to_draw.push_back(curr_vertex_attribs[BOTTOM_LEFT]);
 
-        for (int k = 0; k < 6; k++)
-        {
-            vertex_elements_to_draw.push_back(BASE_VERTEX_ELEMS[k] + quads_to_draw.size() * 6);
-        }
-
-        quads_to_draw.push_back(curr_quad_attribs);
+        for (float& attrib : curr_quad_attribs)
+            quads_attribs_to_draw.emplace_back(attrib);
     }
     bool LoadFont(const char* path)
     {
@@ -448,7 +448,7 @@ namespace shader
 namespace
 {
     float curr_text_scale = 24;
-    GLuint TRANSFORM_LOC, PROGRAM_ID, UNIFORM_BIND_INDEX;
+    GLuint TRANSFORM_LOC, PROGRAM_ID;
 
     bool Init(const std::filesystem::path& vert_path, const std::filesystem::path& frag_path)
     {
@@ -534,44 +534,52 @@ namespace
 
         TRANSFORM_LOC = glGetUniformLocation(PROGRAM_ID, "transform");
 
-        UNIFORM_BIND_INDEX = glGetUniformBlockIndex(PROGRAM_ID, "Quads");
-        glUniformBlockBinding(PROGRAM_ID, UNIFORM_BIND_INDEX, 0);
-
         glGenVertexArrays(1, &quad_vao);
-        glBindVertexArray(quad_vao);
-        glGenBuffers(1, &vertex_attribs_vbo);
-        glBindBuffer(GL_ARRAY_BUFFER, vertex_attribs_vbo);
-        glGenBuffers(1, &quad_attribs_ubo);
-
-        // Specify the vertex attribute layout
-        GLuint vertex_pos_loc = glGetAttribLocation(PROGRAM_ID, "vertex_pos");
-        glEnableVertexAttribArray(vertex_pos_loc);
-        glVertexAttribPointer(vertex_pos_loc, 2, GL_FLOAT, GL_FALSE, sizeof(VertexAttribs), (void*)offsetof(VertexAttribs, VertexAttribs::pos));
-
-        // todo
-        // Optimize UV's since they are the same for each quad and currently a waste of memory
-        GLuint vertex_uv_loc = glGetAttribLocation(PROGRAM_ID, "vertex_uv");
-        glEnableVertexAttribArray(vertex_uv_loc);
-        glVertexAttribPointer(vertex_uv_loc, 2, GL_FLOAT, GL_FALSE, sizeof(VertexAttribs), (void*)offsetof(VertexAttribs, VertexAttribs::uv));
-
-        GLuint vertex_corner_mask_loc = glGetAttribLocation(PROGRAM_ID, "vertex_corner_mask");
-        glEnableVertexAttribArray(vertex_corner_mask_loc);
-        glVertexAttribIPointer(vertex_corner_mask_loc, 1, GL_UNSIGNED_INT, sizeof(VertexAttribs), (void*)offsetof(VertexAttribs, VertexAttribs::corner_mask));
-
-        GLuint vertex_color_loc = glGetAttribLocation(PROGRAM_ID, "vertex_color");
-        glEnableVertexAttribArray(vertex_color_loc);
-        glVertexAttribPointer(vertex_color_loc, 4, GL_FLOAT, GL_FALSE, sizeof(VertexAttribs), (void*)offsetof(VertexAttribs, VertexAttribs::fill_color));
-
-        GLuint vertex_outline_color_loc = glGetAttribLocation(PROGRAM_ID, "vertex_outline_color");
-        glEnableVertexAttribArray(vertex_outline_color_loc);
-        glVertexAttribPointer(vertex_outline_color_loc, 4, GL_FLOAT, GL_FALSE, sizeof(VertexAttribs), (void*)offsetof(VertexAttribs, VertexAttribs::outline_color));
-
+        glGenBuffers(1, &vertex_dynamic_attribs_vbo);
+        glGenBuffers(1, &vertex_static_attribs_vbo);
         glGenBuffers(1, &vertex_ebo);
+        glGenBuffers(1, &quad_attribs_ssbo);
+       
+        glBindVertexArray(quad_vao);
+        glBindBuffer(GL_ARRAY_BUFFER, vertex_dynamic_attribs_vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, vertex_static_attribs_vbo);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vertex_ebo);
-        const int NUM_QUAD_ELEMS = 6;
-        GLuint quad_elems[NUM_QUAD_ELEMS]{ 2, 1, 0, 2, 0, 3};
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLuint) * NUM_QUAD_ELEMS, quad_elems, GL_STATIC_DRAW);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, quad_attribs_ssbo);
+        
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, quad_attribs_ssbo);
+        
+        // Configure dynamic vertex attributes
+        glBindBuffer(GL_ARRAY_BUFFER, vertex_dynamic_attribs_vbo);
 
+        GLuint vertex_pos_loc = glGetAttribLocation(PROGRAM_ID, "pos");
+        glEnableVertexAttribArray(vertex_pos_loc);
+        glVertexAttribPointer(vertex_pos_loc, 2, GL_FLOAT, GL_FALSE, sizeof(DynamicVertexAttribs), (void*)offsetof(DynamicVertexAttribs, DynamicVertexAttribs::pos));
+
+        GLuint vertex_corner_mask_loc = glGetAttribLocation(PROGRAM_ID, "corner_mask");
+        glEnableVertexAttribArray(vertex_corner_mask_loc);
+        glVertexAttribPointer(vertex_corner_mask_loc, 1, GL_FLOAT, GL_FALSE, sizeof(DynamicVertexAttribs), (void*)offsetof(DynamicVertexAttribs, DynamicVertexAttribs::corner_mask));
+
+        GLuint vertex_fill_color_loc = glGetAttribLocation(PROGRAM_ID, "fill_color");
+        glEnableVertexAttribArray(vertex_fill_color_loc);
+        glVertexAttribPointer(vertex_fill_color_loc, 4, GL_FLOAT, GL_FALSE, sizeof(DynamicVertexAttribs), (void*)offsetof(DynamicVertexAttribs, DynamicVertexAttribs::fill_color));
+        
+        GLuint vertex_outline_color_loc = glGetAttribLocation(PROGRAM_ID, "outline_color");
+        glEnableVertexAttribArray(vertex_outline_color_loc);
+        glVertexAttribPointer(vertex_outline_color_loc, 4, GL_FLOAT, GL_FALSE, sizeof(DynamicVertexAttribs), (void*)offsetof(DynamicVertexAttribs, DynamicVertexAttribs::outline_color));
+        
+        // -----------
+       
+        // Configure static vertex attributes
+        glBindBuffer(GL_ARRAY_BUFFER, vertex_static_attribs_vbo);
+
+        GLuint vertex_uv_loc = glGetAttribLocation(PROGRAM_ID, "uv");
+        glEnableVertexAttribArray(vertex_uv_loc);
+        glVertexAttribPointer(vertex_uv_loc, 2, GL_FLOAT, GL_FALSE, sizeof(StaticVertexAttribs), (void*)offsetof(StaticVertexAttribs, StaticVertexAttribs::uv));
+
+        GLuint vertex_quad_index_loc = glGetAttribLocation(PROGRAM_ID, "quad_index");
+        glEnableVertexAttribArray(vertex_quad_index_loc);
+        glVertexAttribIPointer(vertex_quad_index_loc, 1, GL_UNSIGNED_INT, sizeof(StaticVertexAttribs), (void*)offsetof(StaticVertexAttribs, StaticVertexAttribs::quad_index));
+        
         return true;
     }
     void Activate()
@@ -618,11 +626,11 @@ void SetRectCornerMask(bool mask)
 }
 void SetRectCornerSize(float size)
 {
-    curr_quad_attribs[3][1] = size;
+    curr_quad_attribs[7] = size;
 }
 void SetOutlineThickness(float thickness)
 {
-    curr_quad_attribs[3][0] = thickness;
+    curr_quad_attribs[6] = thickness;
 }
 float GetTextWidth(const std::string& Text)
 {
@@ -752,7 +760,7 @@ void NewFrame()
     }
     scroll_update_received = false;
     cursor_update_received = false;
-    mouse_button_update_received = false;
+    mouse_button_update_received = false;   
 }
 void DrawFrame()
 {
@@ -766,32 +774,62 @@ void DrawFrame()
 
     shader::Activate();
 
-    int number_of_quads = quads_to_draw.size();
+    size_t num_verts_this_frame = vertex_dynamic_attribs_to_draw.size();
+    size_t num_quads_this_frame = num_verts_this_frame / 4;
 
-    if (number_of_quads > last_number_of_quads)
+    bool more_vertex_memory_needed = num_quads_this_frame > max_number_of_quads;
+    max_number_of_quads = std::max(num_quads_this_frame, max_number_of_quads);
+
+    glBindVertexArray(quad_vao);    
+
+    // Update static vertex attributes
+    if (more_vertex_memory_needed)
     {
-        glBindBuffer(GL_ARRAY_BUFFER, vertex_attribs_vbo);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(VertexAttribs) * vertices_to_draw.size(), vertices_to_draw.data(), GL_DYNAMIC_DRAW);
+        GLuint quad_index = vertex_static_attribs_to_draw.size() / 4;
+        while (vertex_elements_to_draw.size() / 6 < num_quads_this_frame)
+        {
+            for (int k = 0; k < 6; k++)
+            {
+                vertex_elements_to_draw.push_back(BASE_VERTEX_ELEMS[k] + quad_index * 4);
+            }
+
+            vertex_static_attribs_to_draw.emplace_back(StaticVertexAttribs(Vec2(0, 0), quad_index * 8));
+            vertex_static_attribs_to_draw.emplace_back(StaticVertexAttribs(Vec2(1, 0), quad_index * 8));
+            vertex_static_attribs_to_draw.emplace_back(StaticVertexAttribs(Vec2(1, 1), quad_index * 8));
+            vertex_static_attribs_to_draw.emplace_back(StaticVertexAttribs(Vec2(0, 1), quad_index * 8));
+
+            quad_index++;
+        }
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vertex_ebo);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLuint) * vertex_elements_to_draw.size(), vertex_elements_to_draw.data(), GL_STATIC_DRAW);
+        
+        glBindBuffer(GL_ARRAY_BUFFER, vertex_static_attribs_vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(StaticVertexAttribs) * vertex_static_attribs_to_draw.size(), vertex_static_attribs_to_draw.data(), GL_STATIC_DRAW);
+    }
+
+    // Update dynamic vertex attributes
+    if (more_vertex_memory_needed)
+    {
+        glBindBuffer(GL_ARRAY_BUFFER, vertex_dynamic_attribs_vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(DynamicVertexAttribs) * vertex_dynamic_attribs_to_draw.size(), vertex_dynamic_attribs_to_draw.data(), GL_DYNAMIC_DRAW);
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, quad_attribs_ssbo);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(float) * quads_attribs_to_draw.size(), quads_attribs_to_draw.data(), GL_DYNAMIC_COPY);
     }
     else
     {
-        glBindBuffer(GL_ARRAY_BUFFER, vertex_attribs_vbo);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(VertexAttribs) * vertices_to_draw.size(), vertices_to_draw.data());
+        glBindBuffer(GL_ARRAY_BUFFER, vertex_dynamic_attribs_vbo);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(DynamicVertexAttribs) * vertex_dynamic_attribs_to_draw.size(), vertex_dynamic_attribs_to_draw.data());
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, quad_attribs_ssbo);
+        glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(float) * quads_attribs_to_draw.size(), quads_attribs_to_draw.data());
     }
-   
-    glBindBuffer(GL_UNIFORM_BUFFER, quad_attribs_ubo);
-    glBufferData(GL_UNIFORM_BUFFER, sizeof(QuadAttribs) * quads_to_draw.size(), quads_to_draw.data(), GL_DYNAMIC_DRAW);
-    glBindBufferBase(GL_UNIFORM_BUFFER, shader::UNIFORM_BIND_INDEX, quad_attribs_ubo);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
 
-    glBindVertexArray(quad_vao);
-    glDrawElements(GL_TRIANGLES, number_of_quads * 6, GL_UNSIGNED_INT, 0);
+    glDrawElements(GL_TRIANGLES, num_quads_this_frame * 6, GL_UNSIGNED_INT, 0);
 
-    last_number_of_quads = number_of_quads;
-    quads_to_draw.clear();
-    vertices_to_draw.clear();
-    vertex_elements_to_draw.clear();
+    quads_attribs_to_draw.clear();
+    vertex_dynamic_attribs_to_draw.clear();
 
     glfwSwapBuffers(window_ptr);
     glClearColor(0.5, 0.5, 0.5, 1.0f);
@@ -824,9 +862,12 @@ void DrawRect(const Vec2& pos, const Vec2& size)
 {
     using namespace shader;
 
-    curr_quad_attribs[2][0] = RECT_MODE;
-    curr_quad_attribs[0] = pos;
-    curr_quad_attribs[1] = size;
+    curr_quad_attribs[0] = pos.x;
+    curr_quad_attribs[1] = pos.y;
+    curr_quad_attribs[2] = size.x;
+    curr_quad_attribs[3] = size.y;
+    curr_quad_attribs[4] = RECT_MODE;
+
     Vec2 vertices[4] = { pos + size * Vec2(0,0), pos + size * Vec2(1,0), pos + size * Vec2(1,1), pos + size * Vec2(0,1) };
     DrawQuad(vertices);
 }
