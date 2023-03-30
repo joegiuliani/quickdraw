@@ -11,13 +11,12 @@ int main()
 	shader::SetRectCornerMask(0);
 	shader::SetOutlineColor(RGBA(0, 0, 0, 1));
 	shader::SetOutlineThickness(1);
-	shader::SetRectCornerMask(1, shader::VertexIndex::TOP_LEFT);
+	shader::SetRectCornerMask(1);
+	shader::SetRectCornerSize(5);
 
 	while (!ShouldClose())
 	{
 		NewFrame();
-
-		shader::SetRectCornerSize(cosf(Time())*20);
 
 		shader::SetFillColor(RGBA(1));
 		DrawRect(Vec2(50), Vec2(100));

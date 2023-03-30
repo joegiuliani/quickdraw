@@ -63,28 +63,17 @@ namespace
         Axis axis;
         RGBA start, end;
     };
-
-    constexpr float GLOBAL_FONT_SCALE = 1.0f;
-    constexpr float advance_fac = 1.0f / float(1 << 6);
-    float font_resolution = 128;
-    float font_import_scale = 1.0f / font_resolution;
-    float font_offset = 0;
-    float font_height = 0;
-    float font_line_distance = 1;
-    GLFWwindow* window_ptr = nullptr;
-    Vec2 viewport_dim(640, 480);
-    double last_time = 0;
-    double delta_time = 0;
-    unsigned int frame_number = -1;
-
-    bool scroll_update_received = false;
-    bool cursor_update_received = false;
-    bool mouse_button_update_received = false;
-
-    constexpr GLuint RECT_MODE = 0;
-    // constexpr GLuint TEXTURE_MODE = 1, FONT_MODE = 2, PATH_MODE = 3;
+    GLuint TRANSFORM_LOC, PROGRAM_ID;
     GLuint quad_vao, vertex_dynamic_attribs_vbo, vertex_static_attribs_vbo, vertex_ebo, quad_attribs_ssbo;
     GLuint BASE_VERTEX_ELEMS[6]{ 2, 1, 0, 2, 0, 3 };
+
+    Vec2 VERTEX_UVS[4] =
+    {
+        Vec2(0,0),
+        Vec2(1,0),
+        Vec2(1,1),
+        Vec2(0,1)
+    };
 
     struct DynamicVertexAttribs
     {
@@ -97,43 +86,42 @@ namespace
     {
         Vec2 uv = Vec2(0);
         GLuint quad_index = 0;
-        StaticVertexAttribs(const Vec2& t_uv, GLuint t_quad_index):uv(t_uv),quad_index(t_quad_index)
-        {
-        }
+        StaticVertexAttribs(const Vec2& t_uv, GLuint t_quad_index) :uv(t_uv), quad_index(t_quad_index)
+        {}
     };
-    DynamicVertexAttribs curr_vertex_attribs[4];
+    constexpr size_t ATTRIBS_PER_QUAD = 7;
+    constexpr size_t VERTS_PER_QUAD = 4;
+    constexpr size_t ELEMS_PER_QUAD = 6;
     std::vector<DynamicVertexAttribs> vertex_dynamic_attribs_to_draw;
     std::vector<StaticVertexAttribs> vertex_static_attribs_to_draw;
     std::vector<GLuint> vertex_elements_to_draw;
     std::vector<float> quads_attribs_to_draw;
-    float curr_quad_attribs[8];
+
+    /*
+    constexpr float GLOBAL_FONT_SCALE = 1.0f;
+    constexpr float advance_fac = 1.0f / float(1 << 6);
+    float font_resolution = 128;
+    float font_import_scale = 1.0f / font_resolution;
+    float font_offset = 0;
+    float font_height = 0;
+    float font_line_distance = 1;
+    */
+    GLFWwindow* window_ptr = nullptr;
+    Vec2 viewport_dim(640, 480);
+    double last_time = 0;
+    double delta_time = 0;
+    unsigned int frame_number = -1;
+    bool scroll_update_received = false;
+    bool cursor_update_received = false;
+    bool mouse_button_update_received = false;
 
     size_t max_number_of_quads;
-    
-    int last_number_of_quads = 0;
     void glfwErrorCallback(int error, const char* description)
     {
         fprintf(stderr, "Glfw Error %d: %s\n", error, description);
     }
-    void DrawQuad(const Vec2* vertex_positions)
-    {
-        using namespace shader;
-
-        curr_vertex_attribs[TOP_LEFT].pos = vertex_positions[TOP_LEFT];
-        vertex_dynamic_attribs_to_draw.push_back(curr_vertex_attribs[TOP_LEFT]);
-
-        curr_vertex_attribs[TOP_RIGHT].pos = vertex_positions[TOP_RIGHT];
-        vertex_dynamic_attribs_to_draw.push_back(curr_vertex_attribs[TOP_RIGHT]);
-
-        curr_vertex_attribs[BOTTOM_RIGHT].pos = vertex_positions[BOTTOM_RIGHT];
-        vertex_dynamic_attribs_to_draw.push_back(curr_vertex_attribs[BOTTOM_RIGHT]);
-
-        curr_vertex_attribs[BOTTOM_LEFT].pos = vertex_positions[BOTTOM_LEFT];
-        vertex_dynamic_attribs_to_draw.push_back(curr_vertex_attribs[BOTTOM_LEFT]);
-
-        for (float& attrib : curr_quad_attribs)
-            quads_attribs_to_draw.emplace_back(attrib);
-    }
+    
+    /*
     bool LoadFont(const char* path)
     {
         FT_Library ft;
@@ -203,6 +191,7 @@ namespace
 
         return true;
     }
+    */
 
     std::set<WindowResizeObserver*> window_resize_observers;
     std::set<WindowTerminationObserver*> window_termination_observers;
@@ -219,6 +208,7 @@ namespace
     };
 
 } // namespace
+
 
 TextureHandle LoadTexture(const char* input_path, Vec2* output_dimensions)
 {
@@ -447,8 +437,14 @@ namespace shader
 {
 namespace
 {
-    float curr_text_scale = 24;
-    GLuint TRANSFORM_LOC, PROGRAM_ID;
+    //float curr_text_scale = 24;
+
+    constexpr GLuint RECT_MODE = 0;
+    // constexpr GLuint TEXTURE_MODE = 1, FONT_MODE = 2,
+    constexpr GLuint PATH_MODE = 3;
+
+    DynamicVertexAttribs curr_vertex_attribs[4];
+    float curr_quad_attribs[ATTRIBS_PER_QUAD];
 
     bool Init(const std::filesystem::path& vert_path, const std::filesystem::path& frag_path)
     {
@@ -586,6 +582,41 @@ namespace
     {
         glUseProgram(PROGRAM_ID);
     }
+
+    /**
+    * Must be one of RECT_MODE, PATH_MODE
+    */
+    void SetQuadMode(GLuint mode)
+    {
+        curr_quad_attribs[4] = mode;
+    }
+    void SetRectPos(const Vec2& pos)
+    {
+        curr_quad_attribs[0] = pos.x;
+        curr_quad_attribs[1] = pos.y;
+    }
+    void SetRectSize(const Vec2& size)
+    {
+        curr_quad_attribs[2] = size.x;
+        curr_quad_attribs[3] = size.y;
+    }
+    void SetPathThickness(float thickness)
+    {
+        curr_quad_attribs[2] = thickness;
+    }
+
+    void DrawQuad()
+    {
+        using namespace shader;
+
+        vertex_dynamic_attribs_to_draw.emplace_back(curr_vertex_attribs[TOP_LEFT]);
+        vertex_dynamic_attribs_to_draw.emplace_back(curr_vertex_attribs[TOP_RIGHT]);
+        vertex_dynamic_attribs_to_draw.emplace_back(curr_vertex_attribs[BOTTOM_RIGHT]);
+        vertex_dynamic_attribs_to_draw.emplace_back(curr_vertex_attribs[BOTTOM_LEFT]);
+
+        for (float& attrib : curr_quad_attribs)
+            quads_attribs_to_draw.emplace_back(attrib);
+    }
 }
 
 void SetFillColor(const RGBA& color, VertexIndex index)
@@ -624,14 +655,15 @@ void SetRectCornerMask(bool mask)
     SetRectCornerMask(mask, BOTTOM_RIGHT);
     SetRectCornerMask(mask, BOTTOM_LEFT);
 }
-void SetRectCornerSize(float size)
-{
-    curr_quad_attribs[7] = size;
-}
 void SetOutlineThickness(float thickness)
 {
-    curr_quad_attribs[6] = thickness;
+    curr_quad_attribs[5] = thickness;
 }
+void SetRectCornerSize(float size)
+{
+    curr_quad_attribs[6] = size;
+}
+/*
 float GetTextWidth(const std::string& Text)
 {
     float ret = 0;
@@ -645,7 +677,6 @@ float GetTextHeight()
 {
     return curr_text_scale * font_height;
 }
-
 Vec2 TextSize(const std::string& str)
 {
     return Vec2(GetTextWidth(str), GetTextHeight());
@@ -654,6 +685,7 @@ void SetTextScale(float s)
 {
     curr_text_scale = s;
 }
+*/
 } // namespace shader
 
 void WindowSizeCallback(GLFWwindow *window_ptr, int width, int height)
@@ -663,7 +695,7 @@ void WindowSizeCallback(GLFWwindow *window_ptr, int width, int height)
 
     shader::Activate();
     Vec2 transform = Vec2(1.0f / (viewport_dim - 1.0f));
-    glUniform2fv(shader::TRANSFORM_LOC, 1, &transform[0]);
+    glUniform2fv(TRANSFORM_LOC, 1, &transform[0]);
 
     QUICKDRAW_NOTIFY_OBSERVERS(WindowResizeObserver, window_resize_observers, on_window_resize);
 }
@@ -716,10 +748,12 @@ bool Init(const char* name, unsigned int width, unsigned int height)
     glEnable(GL_MULTISAMPLE);
     glActiveTexture(GL_TEXTURE0);
 
+    /*
     if (!LoadFont("C:\\Windows\\Fonts\\segoeuil.ttf"))
     {
         return false;
     }
+    */
 
     // Initializes vertices and shaders
     if (!shader::Init(std::filesystem::current_path() / "resources" / "quad.vert", std::filesystem::current_path() / "resources" / "quad.frag"))
@@ -775,7 +809,7 @@ void DrawFrame()
     shader::Activate();
 
     size_t num_verts_this_frame = vertex_dynamic_attribs_to_draw.size();
-    size_t num_quads_this_frame = num_verts_this_frame / 4;
+    size_t num_quads_this_frame = num_verts_this_frame / VERTS_PER_QUAD;
 
     bool more_vertex_memory_needed = num_quads_this_frame > max_number_of_quads;
     max_number_of_quads = std::max(num_quads_this_frame, max_number_of_quads);
@@ -785,18 +819,18 @@ void DrawFrame()
     // Update static vertex attributes
     if (more_vertex_memory_needed)
     {
-        GLuint quad_index = vertex_static_attribs_to_draw.size() / 4;
-        while (vertex_elements_to_draw.size() / 6 < num_quads_this_frame)
+        GLuint quad_index = vertex_static_attribs_to_draw.size() / VERTS_PER_QUAD;
+        while (vertex_elements_to_draw.size() / ELEMS_PER_QUAD < num_quads_this_frame)
         {
             for (int k = 0; k < 6; k++)
             {
-                vertex_elements_to_draw.push_back(BASE_VERTEX_ELEMS[k] + quad_index * 4);
+                vertex_elements_to_draw.push_back(BASE_VERTEX_ELEMS[k] + quad_index * VERTS_PER_QUAD);
             }
 
-            vertex_static_attribs_to_draw.emplace_back(StaticVertexAttribs(Vec2(0, 0), quad_index * 8));
-            vertex_static_attribs_to_draw.emplace_back(StaticVertexAttribs(Vec2(1, 0), quad_index * 8));
-            vertex_static_attribs_to_draw.emplace_back(StaticVertexAttribs(Vec2(1, 1), quad_index * 8));
-            vertex_static_attribs_to_draw.emplace_back(StaticVertexAttribs(Vec2(0, 1), quad_index * 8));
+            vertex_static_attribs_to_draw.emplace_back(VERTEX_UVS[shader::TOP_LEFT], quad_index * ATTRIBS_PER_QUAD);
+            vertex_static_attribs_to_draw.emplace_back(VERTEX_UVS[shader::TOP_RIGHT], quad_index * ATTRIBS_PER_QUAD);
+            vertex_static_attribs_to_draw.emplace_back(VERTEX_UVS[shader::BOTTOM_LEFT], quad_index * ATTRIBS_PER_QUAD);
+            vertex_static_attribs_to_draw.emplace_back(VERTEX_UVS[shader::BOTTOM_RIGHT], quad_index * ATTRIBS_PER_QUAD);
 
             quad_index++;
         }
@@ -824,9 +858,8 @@ void DrawFrame()
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, quad_attribs_ssbo);
         glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(float) * quads_attribs_to_draw.size(), quads_attribs_to_draw.data());
     }
-    glDrawArrays(GL_TRIANGLES, 0, 3);
 
-    glDrawElements(GL_TRIANGLES, num_quads_this_frame * 6, GL_UNSIGNED_INT, 0);
+    glDrawElements(GL_TRIANGLES, num_quads_this_frame * ELEMS_PER_QUAD, GL_UNSIGNED_INT, 0);
 
     quads_attribs_to_draw.clear();
     vertex_dynamic_attribs_to_draw.clear();
@@ -866,10 +899,14 @@ void DrawRect(const Vec2& pos, const Vec2& size)
     curr_quad_attribs[1] = pos.y;
     curr_quad_attribs[2] = size.x;
     curr_quad_attribs[3] = size.y;
-    curr_quad_attribs[4] = RECT_MODE;
+    SetQuadMode(RECT_MODE);
 
-    Vec2 vertices[4] = { pos + size * Vec2(0,0), pos + size * Vec2(1,0), pos + size * Vec2(1,1), pos + size * Vec2(0,1) };
-    DrawQuad(vertices);
+    curr_vertex_attribs[TOP_LEFT].pos     = pos + size * VERTEX_UVS[TOP_LEFT];
+    curr_vertex_attribs[TOP_RIGHT].pos    = pos + size * VERTEX_UVS[TOP_RIGHT];
+    curr_vertex_attribs[BOTTOM_RIGHT].pos = pos + size * VERTEX_UVS[BOTTOM_RIGHT];
+    curr_vertex_attribs[BOTTOM_LEFT].pos  = pos + size * VERTEX_UVS[BOTTOM_LEFT];
+
+    DrawQuad();
 }
 /*
 void DrawText(const Vec2& pos, const std::string &Text)
@@ -897,38 +934,35 @@ void DrawText(const Vec2& pos, const std::string &Text)
         curs += ch.advance * text_scale;
     }
 }
-
-
-void DrawPath(const std::vector<Vec2> &points, float thickness, const Vec2)
+*/
+void DrawPath(const std::vector<Vec2> &points, float thickness, const Vec2& offset)
 {
+    using namespace shader;
+
     if (points.size() < 2)
     {
-        std::cout << "Can't draw a path with less than 2 points\n";
+        std::cout << "quickdraw::window - Can't draw a path with less than 2 points\n";
         return;
     }
-    shader::SetMode(shader::Mode::PATH);
-    shader::SetFloat("path_thickness", thickness);
-    std::vector<float> point_dists_from_start;
+
+    DynamicVertexAttribs saved_vertex_attribs[4];
+    memcpy(saved_vertex_attribs, curr_vertex_attribs, 4);
+
+    std::vector<float> length_at_point;
     float path_length = 0;
 
-    bool needs_length_data =
-        shader::curr_fill.axis == Axis::HORIZONTAL || shader::curr_outline.axis == Axis::HORIZONTAL;
+    curr_quad_attribs[2] = thickness;
+    SetQuadMode(PATH_MODE);
 
-    if (needs_length_data)
+    length_at_point.resize(points.size());
+    length_at_point[0] = 0;
+    for (size_t k = 1; k < points.size(); k++)
     {
-        point_dists_from_start.resize(points.size());
-        point_dists_from_start[0] = 0;
-        for (size_t k = 1; k < points.size(); k++)
-        {
-            float line_length = glm::distance(points[k - 1], points[k]);
-            path_length += line_length;
-            point_dists_from_start[k] = path_length;
-        }
-
-        shader::SetFloat("path_length", path_length);
-        shader::SetFloat("curr_path_progress", 0);
-        shader::SetFloat("next_path_progress", point_dists_from_start[1] / path_length);
+        float segment_length = glm::distance(points[k - 1], points[k]);
+        path_length += segment_length;
+        length_at_point[k] = path_length;
     }
+    
     // This method deals with the edges shared by the quads used
     // to draw the path. Each edge's slope is equal to the normal of
     // the path at the point the edge lies on. Each edge's length is
@@ -960,13 +994,18 @@ void DrawPath(const std::vector<Vec2> &points, float thickness, const Vec2)
     Vec2 end_edge_slope = -(line_normal + next_normal) * end_edge_slope_coeff;
 
     // Set the quads points
-    Vec2 top_left = start_edge_slope + points[0];
-    Vec2 top_right = end_edge_slope + points[1];
-    Vec2 bottom_right = -end_edge_slope + points[1];
-    Vec2 bottom_left = -start_edge_slope + points[0];
+    curr_vertex_attribs[TOP_LEFT].pos = start_edge_slope + points[0];
+    curr_vertex_attribs[TOP_RIGHT].pos = end_edge_slope + points[1];
+    curr_vertex_attribs[BOTTOM_RIGHT].pos = -end_edge_slope + points[1];
+    curr_vertex_attribs[BOTTOM_LEFT].pos = -start_edge_slope + points[0];
+
+    curr_vertex_attribs[TOP_LEFT].fill_color = glm::mix(saved_vertex_attribs[TOP_LEFT].fill_color, saved_vertex_attribs[TOP_RIGHT].fill_color, length_at_point[0] / path_length);
+    curr_vertex_attribs[BOTTOM_LEFT].fill_color = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].fill_color, saved_vertex_attribs[BOTTOM_RIGHT].fill_color, length_at_point[0] / path_length);
+    curr_vertex_attribs[TOP_RIGHT].outline_color = glm::mix(saved_vertex_attribs[TOP_LEFT].fill_color, saved_vertex_attribs[TOP_RIGHT].fill_color, length_at_point[1] / path_length);
+    curr_vertex_attribs[BOTTOM_RIGHT].outline_color = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].fill_color, saved_vertex_attribs[BOTTOM_RIGHT].fill_color, length_at_point[1] / path_length);
 
     // draw the quad
-    DrawQuad(top_left, top_right, bottom_right, bottom_left);
+    DrawQuad();
 
     if (points.size() > 2)
     {
@@ -976,8 +1015,8 @@ void DrawPath(const std::vector<Vec2> &points, float thickness, const Vec2)
         {
             // Use the end edge from the last quad as the start edge for the current
             // quad
-            top_left = top_right;
-            bottom_left = bottom_right;
+            curr_vertex_attribs[TOP_LEFT] = curr_vertex_attribs[TOP_RIGHT];
+            curr_vertex_attribs[BOTTOM_LEFT] = curr_vertex_attribs[BOTTOM_RIGHT];
 
             // Use the next normal from the last line as the normal for the current
             // line
@@ -991,48 +1030,31 @@ void DrawPath(const std::vector<Vec2> &points, float thickness, const Vec2)
 
             // We already have the start edge from the last quad, so we only need to
             // set the end edge
-            top_right = end_edge_slope + points[k + 1];
-            bottom_right = -end_edge_slope + points[k + 1];
+            curr_vertex_attribs[TOP_RIGHT].pos = end_edge_slope + points[k + 1];
+            curr_vertex_attribs[BOTTOM_RIGHT].pos = -end_edge_slope + points[k + 1];
 
-            if (needs_length_data)
-            {
-                shader::SetFloat("curr_path_progress", point_dists_from_start[k] / path_length);
-                shader::SetFloat("next_path_progress", point_dists_from_start[k + 1] / path_length);
-            }
+            curr_vertex_attribs[TOP_RIGHT].outline_color = glm::mix(saved_vertex_attribs[TOP_LEFT].fill_color, saved_vertex_attribs[TOP_RIGHT].fill_color, length_at_point[k + 1] / path_length);
+            curr_vertex_attribs[BOTTOM_RIGHT].outline_color = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].fill_color, saved_vertex_attribs[BOTTOM_RIGHT].fill_color, length_at_point[k + 1] / path_length);
 
             // buffer
-            DrawQuad(top_left, top_right, bottom_right, bottom_left);
-
+            DrawQuad();
             k++;
         }
 
         // draw the last line
-
-        top_left = top_right;
-        bottom_left = bottom_right;
+        curr_vertex_attribs[TOP_LEFT] = curr_vertex_attribs[TOP_RIGHT];
+        curr_vertex_attribs[BOTTOM_LEFT] = curr_vertex_attribs[BOTTOM_RIGHT];
 
         end_edge_slope = -next_normal * thickness;
-        top_right = end_edge_slope + points[k + 1];
-        bottom_right = -end_edge_slope + points[k + 1];
+        curr_vertex_attribs[TOP_RIGHT].pos = end_edge_slope + points[k + 1];
+        curr_vertex_attribs[BOTTOM_RIGHT].pos = -end_edge_slope + points[k + 1];
+        curr_vertex_attribs[TOP_RIGHT].outline_color = glm::mix(saved_vertex_attribs[TOP_LEFT].fill_color, saved_vertex_attribs[TOP_RIGHT].fill_color, length_at_point[k + 1] / path_length);
+        curr_vertex_attribs[BOTTOM_RIGHT].outline_color = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].fill_color, saved_vertex_attribs[BOTTOM_RIGHT].fill_color, length_at_point[k + 1] / path_length);   
 
-        if (needs_length_data)
-        {
-            shader::SetFloat("curr_path_progress", point_dists_from_start[k] / path_length);
-            shader::SetFloat("next_path_progress", point_dists_from_start[k + 1] / path_length);
-        }
-
-        DrawQuad(top_left, top_right, bottom_right, bottom_left);
-    }
-    if (shader::curr_outline.axis == Axis::HORIZONTAL)
-    {
-        shader::SetOutline(shader::curr_outline.start, shader::curr_outline.end);
-    }
-    if (shader::curr_fill.axis == Axis::HORIZONTAL)
-    {
-        shader::SetFill(shader::curr_fill.start, shader::curr_fill.end);
+        DrawQuad();
     }
 }
-
+/*
 void DrawTexture(TextureHandle handle, const Vec2& pos, const Vec2& size)
 {
     using namespace shader;

@@ -197,6 +197,7 @@ enum ButtonState
 // during initialization.
 bool Init(const char* name, unsigned int width, unsigned int height);
 
+
 // Given a path, writes to output_handle and output_dimensions
 // If unable to load the texture, returns an invalid handle defined by TextureHandleIsValid()
 // File type can be anything supported by stbimage
@@ -206,6 +207,7 @@ void UnloadTexture(TextureHandle* handle);
 
 // Returns true if the value of the handle is valid for functions in this library
 bool TextureHandleIsValid(TextureHandle handle);
+
 
 // TODO add scissor functionality for font shadows
 
@@ -339,6 +341,7 @@ namespace shader
     // Sets the thickness of the outline of the rectangle to be drawn
     void SetOutlineThickness(float thickness);
 
+    /*
     // Sets the scale of Text. Make sure to set the desired Text scale before
     // calling TextSize(...)
     void SetTextScale(float s);
@@ -346,6 +349,7 @@ namespace shader
     // Returns the size of the bounding box of str if it were drawn on the screen.
     // Make sure to set the desired Text scale before calling this method.
     Vec2 TextSize(const std::string& str);
+    */
 } // namespace shader
 
 namespace keyboard

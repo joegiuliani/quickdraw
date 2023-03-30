@@ -26,30 +26,14 @@ out vec4 frag_outline_color;
 out vec2 frag_uv;
 flat out unsigned int frag_quad_index;
 
-flat out vec2 frag_quad_pos;
-flat out vec2 frag_quad_size;
-flat out float frag_quad_mode;
-flat out float frag_quad_texture_id;
-flat out float frag_quad_outline_thickness;
-flat out float frag_quad_corner_size;
-
 void main()
 {
 	frag_pos					= pos;
 	frag_corner_mask			= corner_mask;
 	frag_fill_color				= fill_color;
-	frag_outline_color			= outline_color;
-		
+	frag_outline_color			= outline_color;	
 	frag_uv						= uv;
 	frag_quad_index             = quad_index;
-
-	frag_quad_pos               = vec2(quad_array[quad_index + 0],quad_array[quad_index + 1]);
-	frag_quad_size              = vec2(quad_array[quad_index + 2],quad_array[quad_index + 3]);
-	frag_quad_mode              = quad_array[quad_index + 4];
-	frag_quad_texture_id        = quad_array[quad_index + 5];
-	frag_quad_outline_thickness = quad_array[quad_index + 6];
-	frag_quad_corner_size       = quad_array[quad_index + 7];
-		
 	
 	// vert_pos is in pixel space with the origin at the top left corner of the context
 	// y coordinates increase down the screen, ie flipped
