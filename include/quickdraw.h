@@ -205,7 +205,6 @@ void UnloadTexture(TextureHandle* handle);
 // Returns true if the value of the handle is valid for functions in this library
 bool TextureHandleIsValid(TextureHandle handle);
 
-
 // TODO add scissor functionality for font shadows
 
 void SetWindowIcon(TextureHandle image);
@@ -222,8 +221,10 @@ void DrawRect(const Vec2& pos, const Vec2& size);
 /*
 void DrawText(const Vec2& pos, const std::string &Text);
 */
+
+// - Works best with high resolution curves.
 // - points.size() cannot be less than 2
-void DrawPath(const std::vector<Vec2>& verts, float thickness, const Vec2& offset = Vec2(0));
+void DrawPath(const std::vector<Vec2>& points, float thickness, const Vec2& offset = Vec2(0));
 
 /*
 void DrawTexture(TextureHandle handle, const Vec2& pos, const Vec2& size);

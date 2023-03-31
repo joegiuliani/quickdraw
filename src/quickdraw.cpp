@@ -626,7 +626,6 @@ void SetFillColor(const RGBA& color, VertexIndex index)
 }
 void SetFillColor(const RGBA& color)
 {
-    // TODO see if a for loop or memcpy are faster
     SetFillColor(color, TOP_LEFT);
     SetFillColor(color, TOP_RIGHT);
     SetFillColor(color, BOTTOM_RIGHT);
@@ -932,30 +931,38 @@ void DrawText(const Vec2& pos, const std::string &Text)
 */
 void DrawPath(const std::vector<Vec2> &points, float thickness, const Vec2& offset)
 {
+    /*
+    * The use of VertexIndex breaks down here. For example, if points[n].x > points[n+1].x,
+    * then the TOP_RIGHT vertex is actually to the left of the TOP_LEFT vertex
+    */
+
     using namespace shader;
 
     if (points.size() < 2)
     {
-        std::cout << "quickdraw::window - Can't draw a path with less than 2 points\n";
+        std::cout << "quickdraw::window Cannot draw a path with less than 2 points\n";
         return;
     }
 
+    curr_quad_attribs[2] = thickness;
+    SetQuadMode(PATH_MODE);
+
     DynamicVertexAttribs saved_vertex_attribs[4];
-    memcpy(saved_vertex_attribs, curr_vertex_attribs, 4);
+    for (int k = 0; k < 4; k++)
+    {
+        saved_vertex_attribs[k] = curr_vertex_attribs[k];
+    }
 
     std::vector<float> length_at_point;
     float path_length = 0;
-
-    curr_quad_attribs[2] = thickness;
-    SetQuadMode(PATH_MODE);
 
     // Get the length of the curve so far at each point
     // so that we can properly interpolate the fill/outline colors.
     length_at_point.reserve(points.size());
     length_at_point.push_back(0);
-    for (size_t k = 1; k < points.size(); k++)
+    for (size_t k = 0; k < points.size() - 1; k++)
     {
-        float segment_length = glm::distance(points[k - 1], points[k]);
+        float segment_length = glm::distance(points[k], points[k + 1]);
         path_length += segment_length;
         length_at_point.push_back(path_length);
     }
@@ -968,15 +975,11 @@ void DrawPath(const std::vector<Vec2> &points, float thickness, const Vec2& offs
 
     // Calculate the normal of the previous, current, and next line
     Vec2 line_normal = Normal(points[1] - points[0]);
-    Vec2 next_normal;
+    Vec2 next_normal = line_normal;
 
     // If there are more than 2 points, use the next line's normal
     if (points.size() > 2)
         next_normal = Normal(points[2] - points[1]);
-
-    // otherwise
-    else
-        next_normal = line_normal;
 
     // Precomputed value that when multiplied by the end ray gives the average
     // between the current normal and the next normal and sets the length of end
@@ -990,16 +993,22 @@ void DrawPath(const std::vector<Vec2> &points, float thickness, const Vec2& offs
     // the edge connecting the line with the next line
     Vec2 end_edge_slope = -(line_normal + next_normal) * end_edge_slope_coeff;
 
-    // Set the quads points
-    curr_vertex_attribs[TOP_LEFT].pos = start_edge_slope + points[0] + offset;
-    curr_vertex_attribs[TOP_RIGHT].pos = end_edge_slope + points[1] + offset;
-    curr_vertex_attribs[BOTTOM_RIGHT].pos = -end_edge_slope + points[1] + offset;
-    curr_vertex_attribs[BOTTOM_LEFT].pos = -start_edge_slope + points[0] + offset;
+    // Set edge data
+    curr_vertex_attribs[TOP_LEFT].pos               = start_edge_slope + points[0] + offset;
+    curr_vertex_attribs[TOP_LEFT].fill_color        = glm::mix(saved_vertex_attribs[TOP_LEFT].fill_color,    saved_vertex_attribs[TOP_RIGHT].fill_color,    length_at_point[0] / path_length);
+    curr_vertex_attribs[TOP_LEFT].outline_color     = glm::mix(saved_vertex_attribs[TOP_LEFT].outline_color, saved_vertex_attribs[TOP_RIGHT].outline_color, length_at_point[0] / path_length);
 
-    curr_vertex_attribs[TOP_LEFT].fill_color = glm::mix(saved_vertex_attribs[TOP_LEFT].fill_color, saved_vertex_attribs[TOP_RIGHT].fill_color, length_at_point[0] / path_length);
-    curr_vertex_attribs[BOTTOM_LEFT].fill_color = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].fill_color, saved_vertex_attribs[BOTTOM_RIGHT].fill_color, length_at_point[0] / path_length);
-    curr_vertex_attribs[TOP_RIGHT].outline_color = glm::mix(saved_vertex_attribs[TOP_LEFT].fill_color, saved_vertex_attribs[TOP_RIGHT].fill_color, length_at_point[1] / path_length);
-    curr_vertex_attribs[BOTTOM_RIGHT].outline_color = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].fill_color, saved_vertex_attribs[BOTTOM_RIGHT].fill_color, length_at_point[1] / path_length);
+    curr_vertex_attribs[TOP_RIGHT].pos              = end_edge_slope + points[1] + offset;
+    curr_vertex_attribs[TOP_RIGHT].fill_color       = glm::mix(saved_vertex_attribs[TOP_LEFT].fill_color,    saved_vertex_attribs[TOP_RIGHT].fill_color,    length_at_point[1] / path_length);
+    curr_vertex_attribs[TOP_RIGHT].outline_color    = glm::mix(saved_vertex_attribs[TOP_LEFT].outline_color, saved_vertex_attribs[TOP_RIGHT].outline_color, length_at_point[1] / path_length);
+
+    curr_vertex_attribs[BOTTOM_RIGHT].pos           = -end_edge_slope + points[1] + offset;
+    curr_vertex_attribs[BOTTOM_RIGHT].fill_color    = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].fill_color,    saved_vertex_attribs[BOTTOM_RIGHT].fill_color,    length_at_point[1] / path_length);
+    curr_vertex_attribs[BOTTOM_RIGHT].outline_color = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].outline_color, saved_vertex_attribs[BOTTOM_RIGHT].outline_color, length_at_point[1] / path_length);
+
+    curr_vertex_attribs[BOTTOM_LEFT].pos            = -start_edge_slope + points[0] + offset;
+    curr_vertex_attribs[BOTTOM_LEFT].fill_color     = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].fill_color,    saved_vertex_attribs[BOTTOM_RIGHT].fill_color,    length_at_point[0] / path_length);
+    curr_vertex_attribs[BOTTOM_LEFT].outline_color  = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].outline_color, saved_vertex_attribs[BOTTOM_RIGHT].outline_color, length_at_point[0] / path_length);
 
     // draw the quad
     DrawQuad();
@@ -1011,7 +1020,7 @@ void DrawPath(const std::vector<Vec2> &points, float thickness, const Vec2& offs
         while (k < points.size() - 2)
         {
             // We get the start edge data from the previous end edge
-            curr_vertex_attribs[TOP_LEFT] = curr_vertex_attribs[TOP_RIGHT];
+            curr_vertex_attribs[TOP_LEFT]    = curr_vertex_attribs[TOP_RIGHT];
             curr_vertex_attribs[BOTTOM_LEFT] = curr_vertex_attribs[BOTTOM_RIGHT];
 
             // Use the next normal from the last line as the normal for the current
@@ -1025,27 +1034,34 @@ void DrawPath(const std::vector<Vec2> &points, float thickness, const Vec2& offs
             end_edge_slope = -(line_normal + next_normal) * end_edge_slope_coeff;
 
             // Set the end edge data
-            curr_vertex_attribs[TOP_RIGHT].pos = end_edge_slope + points[k + 1] + offset;
-            curr_vertex_attribs[BOTTOM_RIGHT].pos = -end_edge_slope + points[k + 1] + offset;
-            curr_vertex_attribs[TOP_RIGHT].outline_color = glm::mix(saved_vertex_attribs[TOP_LEFT].fill_color, saved_vertex_attribs[TOP_RIGHT].fill_color, length_at_point[k + 1] / path_length);
-            curr_vertex_attribs[BOTTOM_RIGHT].outline_color = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].fill_color, saved_vertex_attribs[BOTTOM_RIGHT].fill_color, length_at_point[k + 1] / path_length);
+            curr_vertex_attribs[TOP_RIGHT].pos              = end_edge_slope + points[k + 1] + offset;
+            curr_vertex_attribs[TOP_RIGHT].fill_color       = glm::mix(saved_vertex_attribs[TOP_LEFT].fill_color,    saved_vertex_attribs[TOP_RIGHT].fill_color,    length_at_point[k + 1] / path_length);
+            curr_vertex_attribs[TOP_RIGHT].outline_color    = glm::mix(saved_vertex_attribs[TOP_LEFT].outline_color, saved_vertex_attribs[TOP_RIGHT].outline_color, length_at_point[k + 1] / path_length);
 
-            // buffer
+            curr_vertex_attribs[BOTTOM_RIGHT].pos           = -end_edge_slope + points[k + 1] + offset;
+            curr_vertex_attribs[BOTTOM_RIGHT].fill_color    = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].fill_color,    saved_vertex_attribs[BOTTOM_RIGHT].fill_color,    length_at_point[k + 1] / path_length);
+            curr_vertex_attribs[BOTTOM_RIGHT].outline_color = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].outline_color, saved_vertex_attribs[BOTTOM_RIGHT].outline_color, length_at_point[k + 1] / path_length);
+            
             DrawQuad();
             k++;
         }
 
         // draw the last line
-        curr_vertex_attribs[TOP_LEFT] = curr_vertex_attribs[TOP_RIGHT];
-        curr_vertex_attribs[BOTTOM_LEFT] = curr_vertex_attribs[BOTTOM_RIGHT];
-
         end_edge_slope = -next_normal * thickness;
-        curr_vertex_attribs[TOP_RIGHT].pos = end_edge_slope + points[k + 1] + offset;
-        curr_vertex_attribs[BOTTOM_RIGHT].pos = -end_edge_slope + points[k + 1] + offset;
-        curr_vertex_attribs[TOP_RIGHT].outline_color = glm::mix(saved_vertex_attribs[TOP_LEFT].fill_color, saved_vertex_attribs[TOP_RIGHT].fill_color, length_at_point[k + 1] / path_length);
-        curr_vertex_attribs[BOTTOM_RIGHT].outline_color = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].fill_color, saved_vertex_attribs[BOTTOM_RIGHT].fill_color, length_at_point[k + 1] / path_length);   
+        curr_vertex_attribs[TOP_LEFT]                   = curr_vertex_attribs[TOP_RIGHT];
+        curr_vertex_attribs[BOTTOM_LEFT]                = curr_vertex_attribs[BOTTOM_RIGHT];
+        curr_vertex_attribs[TOP_RIGHT].pos              = end_edge_slope  + points[k + 1] + offset;
+        curr_vertex_attribs[TOP_RIGHT].fill_color       = glm::mix(saved_vertex_attribs[TOP_LEFT].fill_color,    saved_vertex_attribs[TOP_RIGHT].fill_color,    length_at_point[k + 1] / path_length);
+        curr_vertex_attribs[TOP_RIGHT].outline_color    = glm::mix(saved_vertex_attribs[TOP_LEFT].outline_color, saved_vertex_attribs[TOP_RIGHT].outline_color, length_at_point[k + 1] / path_length);
+        curr_vertex_attribs[BOTTOM_RIGHT].pos           = -end_edge_slope + points[k + 1] + offset;
+        curr_vertex_attribs[BOTTOM_RIGHT].fill_color    = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].fill_color,    saved_vertex_attribs[BOTTOM_RIGHT].fill_color,    length_at_point[k + 1] / path_length);
+        curr_vertex_attribs[BOTTOM_RIGHT].outline_color = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].outline_color, saved_vertex_attribs[BOTTOM_RIGHT].outline_color, length_at_point[k + 1] / path_length);
 
         DrawQuad();
+    }
+    for (int k = 0; k < 4; k++)
+    {
+        curr_vertex_attribs[k] = saved_vertex_attribs[k];
     }
 }
 /*
