@@ -10,6 +10,8 @@
 
 #include <set>
 #include <string>
+#include <vector>
+#include <filesystem>
 
 namespace quickdraw
 {
@@ -156,7 +158,6 @@ private:
     bool enabled_ = true;
 };
 
-
 enum Axis
 {
     HORIZONTAL = 0,
@@ -192,17 +193,13 @@ enum ButtonState
     DOWN = GLFW_PRESS
 };
 
-// Initializes a drawing context in a window with a specified name,
-// width, and height. Returns a non-zero value if there was an issue
-// during initialization.
+// Returns a non-zero value if there was an issue during initialization.
 bool Init(const char* name, unsigned int width, unsigned int height);
 
-
-// Given a path, writes to output_handle and output_dimensions
-// If unable to load the texture, returns an invalid handle defined by TextureHandleIsValid()
-// File type can be anything supported by stbimage
-// output_dimensions may be nullptr
-TextureHandle LoadTexture(const char* input_path, Vec2* output_dimensions);
+// - If unable to load the texture, returns an invalid handle defined by TextureHandleIsValid()
+// - File type can be anything supported by stbimage
+// - output_dimensions can be nullptr
+TextureHandle LoadTexture(std::filesystem::path file, Vec2* output_dimensions);
 void UnloadTexture(TextureHandle* handle);
 
 // Returns true if the value of the handle is valid for functions in this library
@@ -224,13 +221,11 @@ void DrawRect(const Vec2& pos, const Vec2& size);
 // Draws Text with a specified position
 /*
 void DrawText(const Vec2& pos, const std::string &Text);
+*/
+// - points.size() cannot be less than 2
+void DrawPath(const std::vector<Vec2>& verts, float thickness, const Vec2& offset = Vec2(0));
 
-// Draws a path with specified vertices and thickness
-// This method draws a path with a specified thickness
-// A solid line is drawn between each point using a quad
-// points.size() cannot be less than 2
-//void DrawPath(const std::vector<Vec2> &verts, float thickness, const Vec2& offset);
-
+/*
 void DrawTexture(TextureHandle handle, const Vec2& pos, const Vec2& size);
 */
 void StartScissor(const Vec2& pos, const Vec2& size);

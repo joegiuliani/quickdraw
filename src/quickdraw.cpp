@@ -210,11 +210,12 @@ namespace
 } // namespace
 
 
-TextureHandle LoadTexture(const char* input_path, Vec2* output_dimensions)
+TextureHandle LoadTexture(std::filesystem::path file, Vec2* output_dimensions)
 {
     TextureHandle return_handle;
     GLsizei width, height;
-    unsigned char* char_buffer = stbi_load(input_path, &width, &height, nullptr, 4);
+    auto file_str = file.string();
+    unsigned char* char_buffer = stbi_load(file_str.c_str(), &width, &height, nullptr, 4);
     if (char_buffer == NULL)
     {
         return INVALID_TEXTURE_HANDLE;
@@ -637,7 +638,6 @@ void SetOutlineColor(const RGBA& color, VertexIndex index)
 }
 void SetOutlineColor(const RGBA& color)
 {    
-    // TODO see if a for loop or memcpy are faster
     SetOutlineColor(color, TOP_LEFT);
     SetOutlineColor(color, TOP_RIGHT);
     SetOutlineColor(color, BOTTOM_RIGHT);
@@ -649,7 +649,6 @@ void SetRectCornerMask(bool mask, VertexIndex index)
 }
 void SetRectCornerMask(bool mask)
 {
-    // TODO see if a for loop or memcpy are faster
     SetRectCornerMask(mask, TOP_LEFT);
     SetRectCornerMask(mask, TOP_RIGHT);
     SetRectCornerMask(mask, BOTTOM_RIGHT);
@@ -722,7 +721,7 @@ bool Init(const char* name, unsigned int width, unsigned int height)
     window_ptr = glfwCreateWindow((int)viewport_dim.x, (int)viewport_dim.y, name, NULL, NULL);
     if (window_ptr == NULL)
     {
-        std::cout << "Could not create GLFW window\n";
+        std::cout << "quickdraw::window Failed to create GLFW window\n";
         return false;
     }
     glfwMakeContextCurrent(window_ptr);
@@ -735,11 +734,9 @@ bool Init(const char* name, unsigned int width, unsigned int height)
     glfwSetMouseButtonCallback(window_ptr, mouse::ButtonCallback);
     mouse::Init();
 
-    // Load OpenGL functions using GLAD
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {
-        std::cout << "Warning: Failed to load GL from GLAD."
-                  << "\n";
+        std::cout << "quickdraw::window Failed to load OpenGL\n";
         return false;
     }
     glEnable(GL_BLEND);
@@ -829,8 +826,8 @@ void DrawFrame()
 
             vertex_static_attribs_to_draw.emplace_back(VERTEX_UVS[shader::TOP_LEFT], quad_index * ATTRIBS_PER_QUAD);
             vertex_static_attribs_to_draw.emplace_back(VERTEX_UVS[shader::TOP_RIGHT], quad_index * ATTRIBS_PER_QUAD);
-            vertex_static_attribs_to_draw.emplace_back(VERTEX_UVS[shader::BOTTOM_LEFT], quad_index * ATTRIBS_PER_QUAD);
             vertex_static_attribs_to_draw.emplace_back(VERTEX_UVS[shader::BOTTOM_RIGHT], quad_index * ATTRIBS_PER_QUAD);
+            vertex_static_attribs_to_draw.emplace_back(VERTEX_UVS[shader::BOTTOM_LEFT], quad_index * ATTRIBS_PER_QUAD);
 
             quad_index++;
         }
@@ -895,11 +892,9 @@ void DrawRect(const Vec2& pos, const Vec2& size)
 {
     using namespace shader;
 
-    curr_quad_attribs[0] = pos.x;
-    curr_quad_attribs[1] = pos.y;
-    curr_quad_attribs[2] = size.x;
-    curr_quad_attribs[3] = size.y;
     SetQuadMode(RECT_MODE);
+    SetRectPos(pos);
+    SetRectSize(size);
 
     curr_vertex_attribs[TOP_LEFT].pos     = pos + size * VERTEX_UVS[TOP_LEFT];
     curr_vertex_attribs[TOP_RIGHT].pos    = pos + size * VERTEX_UVS[TOP_RIGHT];
@@ -954,13 +949,15 @@ void DrawPath(const std::vector<Vec2> &points, float thickness, const Vec2& offs
     curr_quad_attribs[2] = thickness;
     SetQuadMode(PATH_MODE);
 
-    length_at_point.resize(points.size());
-    length_at_point[0] = 0;
+    // Get the length of the curve so far at each point
+    // so that we can properly interpolate the fill/outline colors.
+    length_at_point.reserve(points.size());
+    length_at_point.push_back(0);
     for (size_t k = 1; k < points.size(); k++)
     {
         float segment_length = glm::distance(points[k - 1], points[k]);
         path_length += segment_length;
-        length_at_point[k] = path_length;
+        length_at_point.push_back(path_length);
     }
     
     // This method deals with the edges shared by the quads used
@@ -994,10 +991,10 @@ void DrawPath(const std::vector<Vec2> &points, float thickness, const Vec2& offs
     Vec2 end_edge_slope = -(line_normal + next_normal) * end_edge_slope_coeff;
 
     // Set the quads points
-    curr_vertex_attribs[TOP_LEFT].pos = start_edge_slope + points[0];
-    curr_vertex_attribs[TOP_RIGHT].pos = end_edge_slope + points[1];
-    curr_vertex_attribs[BOTTOM_RIGHT].pos = -end_edge_slope + points[1];
-    curr_vertex_attribs[BOTTOM_LEFT].pos = -start_edge_slope + points[0];
+    curr_vertex_attribs[TOP_LEFT].pos = start_edge_slope + points[0] + offset;
+    curr_vertex_attribs[TOP_RIGHT].pos = end_edge_slope + points[1] + offset;
+    curr_vertex_attribs[BOTTOM_RIGHT].pos = -end_edge_slope + points[1] + offset;
+    curr_vertex_attribs[BOTTOM_LEFT].pos = -start_edge_slope + points[0] + offset;
 
     curr_vertex_attribs[TOP_LEFT].fill_color = glm::mix(saved_vertex_attribs[TOP_LEFT].fill_color, saved_vertex_attribs[TOP_RIGHT].fill_color, length_at_point[0] / path_length);
     curr_vertex_attribs[BOTTOM_LEFT].fill_color = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].fill_color, saved_vertex_attribs[BOTTOM_RIGHT].fill_color, length_at_point[0] / path_length);
@@ -1013,8 +1010,7 @@ void DrawPath(const std::vector<Vec2> &points, float thickness, const Vec2& offs
         size_t k = 1;
         while (k < points.size() - 2)
         {
-            // Use the end edge from the last quad as the start edge for the current
-            // quad
+            // We get the start edge data from the previous end edge
             curr_vertex_attribs[TOP_LEFT] = curr_vertex_attribs[TOP_RIGHT];
             curr_vertex_attribs[BOTTOM_LEFT] = curr_vertex_attribs[BOTTOM_RIGHT];
 
@@ -1028,11 +1024,9 @@ void DrawPath(const std::vector<Vec2> &points, float thickness, const Vec2& offs
             // Find the slope of the end edge
             end_edge_slope = -(line_normal + next_normal) * end_edge_slope_coeff;
 
-            // We already have the start edge from the last quad, so we only need to
-            // set the end edge
-            curr_vertex_attribs[TOP_RIGHT].pos = end_edge_slope + points[k + 1];
-            curr_vertex_attribs[BOTTOM_RIGHT].pos = -end_edge_slope + points[k + 1];
-
+            // Set the end edge data
+            curr_vertex_attribs[TOP_RIGHT].pos = end_edge_slope + points[k + 1] + offset;
+            curr_vertex_attribs[BOTTOM_RIGHT].pos = -end_edge_slope + points[k + 1] + offset;
             curr_vertex_attribs[TOP_RIGHT].outline_color = glm::mix(saved_vertex_attribs[TOP_LEFT].fill_color, saved_vertex_attribs[TOP_RIGHT].fill_color, length_at_point[k + 1] / path_length);
             curr_vertex_attribs[BOTTOM_RIGHT].outline_color = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].fill_color, saved_vertex_attribs[BOTTOM_RIGHT].fill_color, length_at_point[k + 1] / path_length);
 
@@ -1046,8 +1040,8 @@ void DrawPath(const std::vector<Vec2> &points, float thickness, const Vec2& offs
         curr_vertex_attribs[BOTTOM_LEFT] = curr_vertex_attribs[BOTTOM_RIGHT];
 
         end_edge_slope = -next_normal * thickness;
-        curr_vertex_attribs[TOP_RIGHT].pos = end_edge_slope + points[k + 1];
-        curr_vertex_attribs[BOTTOM_RIGHT].pos = -end_edge_slope + points[k + 1];
+        curr_vertex_attribs[TOP_RIGHT].pos = end_edge_slope + points[k + 1] + offset;
+        curr_vertex_attribs[BOTTOM_RIGHT].pos = -end_edge_slope + points[k + 1] + offset;
         curr_vertex_attribs[TOP_RIGHT].outline_color = glm::mix(saved_vertex_attribs[TOP_LEFT].fill_color, saved_vertex_attribs[TOP_RIGHT].fill_color, length_at_point[k + 1] / path_length);
         curr_vertex_attribs[BOTTOM_RIGHT].outline_color = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].fill_color, saved_vertex_attribs[BOTTOM_RIGHT].fill_color, length_at_point[k + 1] / path_length);   
 
