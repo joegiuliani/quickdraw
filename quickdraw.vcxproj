@@ -144,7 +144,7 @@
     <ClCompile Include="src\quickdraw.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="include\quickdraw.h" />
+    <ClInclude Include="include\quickdraw\quickdraw.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

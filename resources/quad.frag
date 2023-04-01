@@ -6,6 +6,8 @@ layout(std430, binding = 0) buffer Quads
 	float quad_array[];
 };
 
+uniform sampler2D font_atlas;
+
 in vec2 frag_pos;
 in float frag_corner_mask;
 in vec4 frag_fill_color;
@@ -16,14 +18,8 @@ flat in unsigned int frag_quad_index;
 out vec4 color_out;
 
 #define MODE_RECT 0
-
-/*
-#define MODE_IMAGE 1
-uniform sampler2D image;
-
+// #define MODE_IMAGE 1
 #define MODE_FONT 2
-*/
-
 #define MODE_PATH 3
 
 bool in_bounds(float x, float mini, float maxi)
@@ -69,13 +65,13 @@ void main()
 	{
 		color *= texture(image, frag_uv);
 	}
-	else if (mode == MODE_FONT)
+	else*/ if (quad_mode() == MODE_FONT)
 	{
-		float glyph_alpha = texture(image, frag_uv).r;
+		float glyph_alpha = texture(font_atlas, frag_uv).r;
 		color.w *= glyph_alpha;
 		color.xyz = mix(color.xyz, vec3(frag_uv.x > 0.5,0,frag_uv.x < 0.5), 1.0-glyph_alpha*0.95);
 	}
-	else */ if (quad_mode() == MODE_PATH)
+	else  if (quad_mode() == MODE_PATH)
 	{
 		// Pixel is in the outline
 		if (path_thickness() * (1 - abs((frag_uv.y-0.5)*2)) < quad_outline_thickness())

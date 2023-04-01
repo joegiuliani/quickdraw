@@ -144,10 +144,10 @@ constexpr int MOD_SUPER = GLFW_MOD_SUPER;
 constexpr int MOD_CAPS_LOCK = GLFW_MOD_CAPS_LOCK;
 constexpr int MOD_NUM_LOCK = GLFW_MOD_NUM_LOCK;
 
-using RGBA = glm::vec4;
+using RGBA = glm::vec<4,float,glm::packed_highp>;
 
 // signed (x,y) coordinates in pixels.
-using Vec2 = glm::vec2;
+using Vec2 = glm::vec<2, float, glm::packed_highp>;
 
 class AbstractObserver
 {
@@ -218,9 +218,7 @@ void Terminate();
 void DrawRect(const Vec2& pos, const Vec2& size);
 
 // Draws Text with a specified position
-/*
 void DrawText(const Vec2& pos, const std::string &Text);
-*/
 
 // - Works best with high resolution curves.
 // - points.size() cannot be less than 2

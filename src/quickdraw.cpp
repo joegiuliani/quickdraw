@@ -1,8 +1,11 @@
-#include "quickdraw.h"
+#include "../include/quickdraw/quickdraw.h"
 #include "../include/ft2build.h"
 #include FT_FREETYPE_H
 #define STB_IMAGE_IMPLEMENTATION
 #include "../include/stb_image.h"
+#define STB_RECT_PACK_IMPLEMENTATION
+#include "../include/stb_rect_pack.h"
+
 #include "../include/glm/geometric.hpp"
 #include <fstream>
 #include <iostream>
@@ -52,12 +55,16 @@ namespace
     constexpr TextureHandle INVALID_TEXTURE_HANDLE = 0;
     struct Glyph
     {
-        TextureHandle texture_handle;
-        Vec2 size;
-        Vec2 bearing;
-        float advance;
+        Vec2 uv_start = Vec2(0);
+        Vec2 uv_end = Vec2(0);
+        Vec2 size = Vec2(0);
+        Vec2 bearing = Vec2(0);
+        float advance = 0;
+        unsigned int abs_pitch = 0;
+        unsigned char* pixels = nullptr;
     };
-    Glyph glyphs[128];
+    constexpr int NUM_GLYPHS = 128;
+    Glyph glyphs[NUM_GLYPHS];
     struct gradient
     {
         Axis axis;
@@ -78,16 +85,17 @@ namespace
     struct DynamicVertexAttribs
     {
         Vec2 pos = Vec2(0);
+        Vec2 uv = Vec2(0);
         GLfloat corner_mask = 1;
         RGBA fill_color = RGBA(1, 0, 1, 1);
         RGBA outline_color = RGBA(1, 0, 1, 1);
     };
     struct StaticVertexAttribs
     {
-        Vec2 uv = Vec2(0);
-        GLuint quad_index = 0;
-        StaticVertexAttribs(const Vec2& t_uv, GLuint t_quad_index) :uv(t_uv), quad_index(t_quad_index)
-        {}
+        GLuint quad_index;
+        StaticVertexAttribs(GLuint t_quad_index) :quad_index(t_quad_index)
+        {
+        }
     };
     constexpr size_t ATTRIBS_PER_QUAD = 7;
     constexpr size_t VERTS_PER_QUAD = 4;
@@ -97,7 +105,8 @@ namespace
     std::vector<GLuint> vertex_elements_to_draw;
     std::vector<float> quads_attribs_to_draw;
 
-    /*
+    GLuint font_atlas_handle;
+
     constexpr float GLOBAL_FONT_SCALE = 1.0f;
     constexpr float advance_fac = 1.0f / float(1 << 6);
     float font_resolution = 128;
@@ -105,7 +114,8 @@ namespace
     float font_offset = 0;
     float font_height = 0;
     float font_line_distance = 1;
-    */
+    Vec2 font_spacing = Vec2(3);
+  
     GLFWwindow* window_ptr = nullptr;
     Vec2 viewport_dim(640, 480);
     double last_time = 0;
@@ -118,80 +128,129 @@ namespace
     size_t max_number_of_quads;
     void glfwErrorCallback(int error, const char* description)
     {
-        fprintf(stderr, "Glfw Error %d: %s\n", error, description);
-    }
-    
-    /*
+        fprintf(stderr, "quickdraw::window GLFW Error %d: %s\n", error, description);
+    }  
     bool LoadFont(const char* path)
     {
         FT_Library ft;
 
         if (FT_Init_FreeType(&ft))
         {
-            std::cout << "Failed to initalize FreeType\n";
+            std::cout << "quickdraw::window Failed to initalize FreeType\n";
             return false;
         }
 
         FT_Face face;
         if (FT_New_Face(ft, path, 0, &face))
         {
-            std::cout << "Failed to load " << path << '\n';
+            std::cout << "quickdraw::window Failed to load " << path << '\n';
             return false;
         }
-        else
+
+        FT_Set_Pixel_Sizes(face, 0, font_resolution);
+
+        Vec2 max_atlas_size = Vec2(0);
+
+        // Load displayable characters
+        const int NUM_GLYPHS = 128;
+        for (unsigned char c = 0; c < NUM_GLYPHS; c++)
         {
-            FT_Set_Pixel_Sizes(face, 0, font_resolution);
-
-            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-
-            // Load displayable characters
-            for (unsigned char c = 0; c < 128; c++)
+            if (FT_Load_Char(face, c, FT_LOAD_RENDER))
             {
-                if (FT_Load_Char(face, c, FT_LOAD_RENDER))
-                {
-                    std::cout << "Failed to load \'" << c << "\'\n";
-                    continue;
-                }
-
-                unsigned int font_texture;
-                glGenTextures(1, &font_texture);
-                glBindTexture(GL_TEXTURE_2D, font_texture);
-
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, face->glyph->bitmap.width, face->glyph->bitmap.rows, 0, GL_RED,
-                    GL_UNSIGNED_BYTE, face->glyph->bitmap.buffer
-
-                );
-
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-                Glyph glyph = { font_texture, Vec2(face->glyph->bitmap.width, face->glyph->bitmap.rows) * font_import_scale,
-                               Vec2(face->glyph->bitmap_left, face->glyph->bitmap_top) * font_import_scale,
-                               (face->glyph->advance.x * advance_fac + 3) * font_import_scale };
-                glyphs[c] = glyph;
+                std::cout << "quickdraw::window Failed to load " << path << '\n';
+                return false;
             }
 
-            float max_height = 0;
-            for (const auto& g : glyphs)
-            {
-                if (g.size.y > max_height)
-                {
-                    max_height = g.bearing.y;
-                }
-            }
+            max_atlas_size += Vec2(face->glyph->bitmap.width, face->glyph->bitmap.rows);
 
-            font_height = max_height;
-            font_offset = max_height * 0.5f;
-
-            glBindTexture(GL_TEXTURE_2D, 0);
+            // Note we set up the glyph uv's later.
+            glyphs[c].size = Vec2(face->glyph->bitmap.width, face->glyph->bitmap.rows);
+            glyphs[c].bearing = Vec2(face->glyph->bitmap_left, face->glyph->bitmap_top);
+            glyphs[c].advance = face->glyph->advance.x * advance_fac + font_spacing.x;
+            glyphs[c].pixels = face->glyph->bitmap.buffer;
+            glyphs[c].abs_pitch = std::abs(face->glyph->bitmap.pitch);
         }
+
+        // Pack glyphs into an atlas
+        stbrp_context context = {};
+        std::vector<stbrp_node> nodes(max_atlas_size.x);
+        stbrp_rect rects[NUM_GLYPHS] = {};
+        for (int k = 0; k < NUM_GLYPHS; k++)
+        {
+            rects[k].w = glyphs[k].size.x;
+            rects[k].h = glyphs[k].size.y;
+            rects[k].id = k;
+        }
+        stbrp_init_target(&context, max_atlas_size.x, max_atlas_size.y, nodes.data(), nodes.size());
+        stbrp_setup_allow_out_of_mem(&context, true);
+        stbrp_pack_rects(&context, rects, NUM_GLYPHS);
+
+        // Calculate glyph UV's
+        
+        // Find bounding box of packed glyphs
+        int atlas_width = rects[0].x + rects[0].w;
+        int atlas_height = rects[0].y + rects[0].h;
+        for (stbrp_rect& rect : rects)
+        {
+            if (!rect.was_packed)
+            {
+                std::cout << "quickdraw::window Failed to load " << path << "\n";
+                return false;
+            }
+
+            atlas_width = std::max(rect.x + rect.w, atlas_width);
+            atlas_height = std::max(rect.y + rect.h, atlas_height);
+        }
+ 
+        // Copy glyphs' bitmap data into atlas
+        // and set up glyph UVs
+        std::vector<unsigned char> font_atlas(size_t(atlas_width) * atlas_height);
+        for (stbrp_rect& rect : rects)
+        {
+            for (size_t x = 0; x < rect.w; x++)
+            {
+                for (size_t y = 0; y < rect.h; y++)
+                {
+                    font_atlas[(x + rect.x) + (y + rect.y) * atlas_width] = glyphs[rect.id].pixels[x + size_t(rect.y) * (glyphs[rect.id].abs_pitch / sizeof(unsigned char))];
+                }
+            }
+            glyphs[rect.id].uv_start = Vec2((float)rect.x, rect.y) / Vec2((float)atlas_width, atlas_height);
+            glyphs[rect.id].uv_end = Vec2((float)rect.x + rect.w, rect.y + rect.h) / Vec2(atlas_width, atlas_height);
+        }
+
+        // Send atlas to the gpu
+        glGenTextures(1, &font_atlas_handle);
+        glBindTexture(GL_TEXTURE_2D, font_atlas_handle);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, atlas_width, atlas_height, 0, GL_RED, GL_UNSIGNED_BYTE, font_atlas.data());
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+        for (Glyph& g : glyphs)
+        {
+            g.size *= font_import_scale;
+            g.bearing *= font_import_scale;
+            g.advance *= font_import_scale;
+        }
+
+        float max_height = 0;
+        for (const auto& g : glyphs)
+        {
+            if (g.size.y > max_height)
+            {
+                max_height = g.bearing.y;
+            }
+        }
+        font_height = max_height;
+        font_offset = max_height * 0.5f;
+        
         FT_Done_Face(face);
         FT_Done_FreeType(ft);
 
         return true;
     }
-    */
 
     std::set<WindowResizeObserver*> window_resize_observers;
     std::set<WindowTerminationObserver*> window_termination_observers;
@@ -208,7 +267,6 @@ namespace
     };
 
 } // namespace
-
 
 TextureHandle LoadTexture(std::filesystem::path file, Vec2* output_dimensions)
 {
@@ -437,14 +495,14 @@ int KeyModifiers()
 namespace shader
 {
 namespace
-{
-    //float curr_text_scale = 24;
-
+{   
+    float curr_text_scale = 24;
     constexpr GLuint RECT_MODE = 0;
-    // constexpr GLuint TEXTURE_MODE = 1, FONT_MODE = 2,
+    // constexpr GLuint TEXTURE_MODE = 1,
+    constexpr GLuint TEXT_MODE = 2;
     constexpr GLuint PATH_MODE = 3;
 
-    DynamicVertexAttribs curr_vertex_attribs[4];
+    DynamicVertexAttribs curr_vertex_attribs[VERTS_PER_QUAD];
     float curr_quad_attribs[ATTRIBS_PER_QUAD];
 
     bool Init(const std::filesystem::path& vert_path, const std::filesystem::path& frag_path)
@@ -564,14 +622,14 @@ namespace
         glEnableVertexAttribArray(vertex_outline_color_loc);
         glVertexAttribPointer(vertex_outline_color_loc, 4, GL_FLOAT, GL_FALSE, sizeof(DynamicVertexAttribs), (void*)offsetof(DynamicVertexAttribs, DynamicVertexAttribs::outline_color));
         
+        GLuint vertex_uv_loc = glGetAttribLocation(PROGRAM_ID, "uv");
+        glEnableVertexAttribArray(vertex_uv_loc);
+        glVertexAttribPointer(vertex_uv_loc, 2, GL_FLOAT, GL_FALSE, sizeof(DynamicVertexAttribs), (void*)offsetof(DynamicVertexAttribs, DynamicVertexAttribs::uv));
+
         // -----------
        
         // Configure static vertex attributes
         glBindBuffer(GL_ARRAY_BUFFER, vertex_static_attribs_vbo);
-
-        GLuint vertex_uv_loc = glGetAttribLocation(PROGRAM_ID, "uv");
-        glEnableVertexAttribArray(vertex_uv_loc);
-        glVertexAttribPointer(vertex_uv_loc, 2, GL_FLOAT, GL_FALSE, sizeof(StaticVertexAttribs), (void*)offsetof(StaticVertexAttribs, StaticVertexAttribs::uv));
 
         GLuint vertex_quad_index_loc = glGetAttribLocation(PROGRAM_ID, "quad_index");
         glEnableVertexAttribArray(vertex_quad_index_loc);
@@ -590,6 +648,14 @@ namespace
     void SetQuadMode(GLuint mode)
     {
         curr_quad_attribs[4] = mode;
+
+        if (mode == RECT_MODE || mode == PATH_MODE)
+        {
+            curr_vertex_attribs[TOP_LEFT].uv = Vec2(0, 0);
+            curr_vertex_attribs[TOP_RIGHT].uv = Vec2(1, 0);
+            curr_vertex_attribs[BOTTOM_RIGHT].uv = Vec2(1, 1);
+            curr_vertex_attribs[BOTTOM_LEFT].uv = Vec2(0, 1);
+        }
     }
     void SetRectPos(const Vec2& pos)
     {
@@ -661,7 +727,7 @@ void SetRectCornerSize(float size)
 {
     curr_quad_attribs[6] = size;
 }
-/*
+
 float GetTextWidth(const std::string& Text)
 {
     float ret = 0;
@@ -683,7 +749,7 @@ void SetTextScale(float s)
 {
     curr_text_scale = s;
 }
-*/
+
 } // namespace shader
 
 void WindowSizeCallback(GLFWwindow *window_ptr, int width, int height)
@@ -738,19 +804,12 @@ bool Init(const char* name, unsigned int width, unsigned int height)
         std::cout << "quickdraw::window Failed to load OpenGL\n";
         return false;
     }
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glDisable(GL_DEPTH_TEST);
-    glEnable(GL_MULTISAMPLE);
-    glActiveTexture(GL_TEXTURE0);
 
-    /*
     if (!LoadFont("C:\\Windows\\Fonts\\segoeuil.ttf"))
     {
         return false;
     }
-    */
-
+    
     // Initializes vertices and shaders
     if (!shader::Init(std::filesystem::current_path() / "resources" / "quad.vert", std::filesystem::current_path() / "resources" / "quad.frag"))
         return false;
@@ -802,6 +861,8 @@ void DrawFrame()
     glDisable(GL_SCISSOR_TEST);
     glActiveTexture(GL_TEXTURE0);
 
+    glBindTexture(GL_TEXTURE_2D, font_atlas_handle);
+
     shader::Activate();
 
     size_t num_verts_this_frame = vertex_dynamic_attribs_to_draw.size();
@@ -823,10 +884,10 @@ void DrawFrame()
                 vertex_elements_to_draw.push_back(BASE_VERTEX_ELEMS[k] + quad_index * VERTS_PER_QUAD);
             }
 
-            vertex_static_attribs_to_draw.emplace_back(VERTEX_UVS[shader::TOP_LEFT], quad_index * ATTRIBS_PER_QUAD);
-            vertex_static_attribs_to_draw.emplace_back(VERTEX_UVS[shader::TOP_RIGHT], quad_index * ATTRIBS_PER_QUAD);
-            vertex_static_attribs_to_draw.emplace_back(VERTEX_UVS[shader::BOTTOM_RIGHT], quad_index * ATTRIBS_PER_QUAD);
-            vertex_static_attribs_to_draw.emplace_back(VERTEX_UVS[shader::BOTTOM_LEFT], quad_index * ATTRIBS_PER_QUAD);
+            vertex_static_attribs_to_draw.emplace_back(quad_index * ATTRIBS_PER_QUAD);
+            vertex_static_attribs_to_draw.emplace_back(quad_index * ATTRIBS_PER_QUAD);
+            vertex_static_attribs_to_draw.emplace_back(quad_index * ATTRIBS_PER_QUAD);
+            vertex_static_attribs_to_draw.emplace_back(quad_index * ATTRIBS_PER_QUAD);
 
             quad_index++;
         }
@@ -895,40 +956,50 @@ void DrawRect(const Vec2& pos, const Vec2& size)
     SetRectPos(pos);
     SetRectSize(size);
 
-    curr_vertex_attribs[TOP_LEFT].pos     = pos + size * VERTEX_UVS[TOP_LEFT];
-    curr_vertex_attribs[TOP_RIGHT].pos    = pos + size * VERTEX_UVS[TOP_RIGHT];
-    curr_vertex_attribs[BOTTOM_RIGHT].pos = pos + size * VERTEX_UVS[BOTTOM_RIGHT];
-    curr_vertex_attribs[BOTTOM_LEFT].pos  = pos + size * VERTEX_UVS[BOTTOM_LEFT];
+    // SetQuadMode sets up UV's for RECT_MODE
+    curr_vertex_attribs[TOP_LEFT].pos     = pos + size * curr_vertex_attribs[TOP_LEFT].uv;
+    curr_vertex_attribs[TOP_RIGHT].pos    = pos + size * curr_vertex_attribs[TOP_RIGHT].uv;
+    curr_vertex_attribs[BOTTOM_RIGHT].pos = pos + size * curr_vertex_attribs[BOTTOM_RIGHT].uv;
+    curr_vertex_attribs[BOTTOM_LEFT].pos  = pos + size * curr_vertex_attribs[BOTTOM_LEFT].uv;
 
     DrawQuad();
 }
-/*
+
 void DrawText(const Vec2& pos, const std::string &Text)
 {
     using namespace shader;
-    curr_quad_attribs.mode = FONT_MODE;
+    SetQuadMode(TEXT_MODE);
+    // TEXT_MODE uses UVs to sample the font atlas
+    // so we need to set them manually for each glyph
 
     float curs = 0;
 
     for (const char &c : Text)
     {
-        Glyph ch = glyphs[(size_t)c];
-        float offset = (font_height - ch.bearing.y - font_offset) * text_scale;
-        glBindTexture(GL_TEXTURE_2D, ch.texture_handle);
+        Glyph& glyph = glyphs[(size_t)c];
+        float offset = (font_height - glyph.bearing.y - font_offset) * curr_text_scale;
 
-        Vec2 quad_top_left(pos.x + ch.bearing.x * text_scale + curs, pos.y + offset);
-        Vec2 quad_bottom_right = quad_top_left + Vec2(ch.size) * text_scale;
+        Vec2 quad_top_left(pos.x + glyph.bearing.x * curr_text_scale + curs, pos.y + offset);
+        Vec2 quad_bottom_right = quad_top_left + Vec2(glyph.size) * curr_text_scale;
+        
+        curr_vertex_attribs[TOP_LEFT].pos = quad_top_left;
+        curr_vertex_attribs[TOP_RIGHT].pos = Vec2(quad_bottom_right.x, quad_top_left.y);
+        curr_vertex_attribs[BOTTOM_RIGHT].pos = quad_bottom_right;
+        curr_vertex_attribs[BOTTOM_LEFT].pos = Vec2(quad_top_left.x, quad_bottom_right.y);
 
-        Vec2 vertices[4] = { quad_top_left, Vec2(quad_bottom_right.x, quad_top_left.y), quad_bottom_right,
-                 Vec2(quad_top_left.x, quad_bottom_right.y) };
-        DrawQuad(vertices);
+        curr_vertex_attribs[TOP_LEFT].uv = glyph.uv_start;
+        curr_vertex_attribs[TOP_RIGHT].uv = Vec2(glyph.uv_end.x, glyph.uv_start.y);
+        curr_vertex_attribs[BOTTOM_RIGHT].uv = glyph.uv_end;
+        curr_vertex_attribs[BOTTOM_LEFT].uv = Vec2(glyph.uv_start.x, glyph.uv_end.y);
+
+        DrawQuad();
 
         // Advance the horizontal cursor to the drawing position of the next
         // character
-        curs += ch.advance * text_scale;
+        curs += glyph.advance * curr_text_scale;
     }
 }
-*/
+
 void DrawPath(const std::vector<Vec2> &points, float thickness, const Vec2& offset)
 {
     /*
@@ -946,6 +1017,7 @@ void DrawPath(const std::vector<Vec2> &points, float thickness, const Vec2& offs
 
     curr_quad_attribs[2] = thickness;
     SetQuadMode(PATH_MODE);
+    // ^ Sets up UVs for PATH_MODE
 
     DynamicVertexAttribs saved_vertex_attribs[4];
     for (int k = 0; k < 4; k++)

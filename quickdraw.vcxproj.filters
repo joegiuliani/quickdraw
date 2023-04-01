@@ -34,7 +34,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="include\quickdraw.h">
+    <ClInclude Include="include\quickdraw\quickdraw.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

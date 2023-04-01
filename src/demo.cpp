@@ -1,4 +1,4 @@
-#include "quickdraw.h"
+#include "../include/quickdraw/quickdraw.h"
 #include <vector>
 using namespace quickdraw;
 using namespace window;
@@ -19,7 +19,6 @@ int main()
 	shader::SetOutlineColor(RGBA(1,0,1,1), shader::BOTTOM_RIGHT);
 	shader::SetOutlineColor(RGBA(0,0,1,1), shader::BOTTOM_LEFT);
 
-
 	std::vector<Vec2> path_verts;
 
 	path_verts.push_back(Vec2(50,50));
@@ -34,6 +33,7 @@ int main()
 		path_verts[2] = Vec2(cosf(Time()) * 50 + 100, sinf(Time()) * 50 + 100);
 
 		DrawPath(path_verts, 4, Vec2(0));
+		DrawText(Vec2(50, 50), "Suck my peen");
 
 		DrawFrame();
 	}
