@@ -30,10 +30,6 @@ int main()
 	{
 		NewFrame();
 
-		path_verts[2] = Vec2(cosf(Time()) * 50 + 100, sinf(Time()) * 50 + 100);
-
-		DrawPath(path_verts, 4, Vec2(0));
-		DrawText(Vec2(50, 50), "Suck my peen");
 
 		DrawFrame();
 	}

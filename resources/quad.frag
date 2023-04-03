@@ -113,5 +113,5 @@ void main()
 		}
 	}
 
-	color_out = color;
+	color_out = texture(font_atlas, frag_uv);
 }

@@ -23,6 +23,7 @@ for (arg_observer_type* ob : observers_this_notification)\
 }\
 }
 
+glm::vec2 font_atlas_size;
 namespace quickdraw
 {
 namespace
@@ -170,6 +171,7 @@ namespace
             glyphs[c].pixels = face->glyph->bitmap.buffer;
             glyphs[c].abs_pitch = std::abs(face->glyph->bitmap.pitch);
         }
+        max_atlas_size.x /= 8;
 
         // Pack glyphs into an atlas
         stbrp_context context = {};
@@ -182,7 +184,6 @@ namespace
             rects[k].id = k;
         }
         stbrp_init_target(&context, max_atlas_size.x, max_atlas_size.y, nodes.data(), nodes.size());
-        stbrp_setup_allow_out_of_mem(&context, true);
         stbrp_pack_rects(&context, rects, NUM_GLYPHS);
 
         // Calculate glyph UV's
@@ -201,22 +202,26 @@ namespace
             atlas_width = std::max(rect.x + rect.w, atlas_width);
             atlas_height = std::max(rect.y + rect.h, atlas_height);
         }
+
+        std::cout << atlas_width << " " << atlas_height << "\n";
  
         // Copy glyphs' bitmap data into atlas
         // and set up glyph UVs
         std::vector<unsigned char> font_atlas(size_t(atlas_width) * atlas_height);
         for (stbrp_rect& rect : rects)
         {
-            for (size_t x = 0; x < rect.w; x++)
+            for (int x = 0; x < rect.w; x++)
             {
-                for (size_t y = 0; y < rect.h; y++)
+                for (int y = 0; y < rect.h; y++)
                 {
-                    font_atlas[(x + rect.x) + (y + rect.y) * atlas_width] = glyphs[rect.id].pixels[x + size_t(rect.y) * (glyphs[rect.id].abs_pitch / sizeof(unsigned char))];
+                    font_atlas[(x + rect.x) + (y + rect.y) * atlas_width] = glyphs[rect.id].pixels[x + size_t(y) * rect.w];
                 }
             }
             glyphs[rect.id].uv_start = Vec2((float)rect.x, rect.y) / Vec2((float)atlas_width, atlas_height);
             glyphs[rect.id].uv_end = Vec2((float)rect.x + rect.w, rect.y + rect.h) / Vec2(atlas_width, atlas_height);
         }
+
+        font_atlas_size = glm::vec2(atlas_width, atlas_height);
 
         // Send atlas to the gpu
         glGenTextures(1, &font_atlas_handle);
@@ -230,7 +235,7 @@ namespace
 
         for (Glyph& g : glyphs)
         {
-            g.size *= font_import_scale;
+            g.size    *= font_import_scale;
             g.bearing *= font_import_scale;
             g.advance *= font_import_scale;
         }
@@ -865,6 +870,8 @@ void DrawFrame()
 
     shader::Activate();
 
+    DrawRect(Vec2(0, 0), font_atlas_size);
+
     size_t num_verts_this_frame = vertex_dynamic_attribs_to_draw.size();
     size_t num_quads_this_frame = num_verts_this_frame / VERTS_PER_QUAD;
 
@@ -969,6 +976,7 @@ void DrawText(const Vec2& pos, const std::string &Text)
 {
     using namespace shader;
     SetQuadMode(TEXT_MODE);
+
     // TEXT_MODE uses UVs to sample the font atlas
     // so we need to set them manually for each glyph
 
