@@ -8,8 +8,6 @@ int main()
 	if (!Init("Quickdraw Demo", 640, 480))
 		return -1;
 
-	shader::SetTextScale(48);
-
 	while (!ShouldClose())
 	{
 		NewFrame();

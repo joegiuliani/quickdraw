@@ -60,8 +60,6 @@ struct Glyph
     Vec2 size = Vec2(0);
     Vec2 bearing = Vec2(0);
     float advance = 0;
-    unsigned int abs_pitch = 0;
-    std::vector<GLubyte> pixels;
 };
 
 class FontAtlas
@@ -98,8 +96,8 @@ public:
         }
         FT_Set_Pixel_Sizes(face, 0, resolution);
 
+        std::vector<GLubyte> glyph_bitmaps[NUM_VALID_CHARS];
         int min_atlas_area = 0;
-
         // width / rows
         float avg_glyph_aspect_ratio = 0;
 
@@ -120,9 +118,10 @@ public:
             glyph.size = Vec2(face->glyph->bitmap.width, face->glyph->bitmap.rows);
             glyph.bearing = Vec2(face->glyph->bitmap_left, face->glyph->bitmap_top);
             glyph.advance = face->glyph->advance.x * ADVANCE_FAC + horizontal_spacing_; // If text quads are positioned incorrectly its probably this
-            glyph.abs_pitch = std::abs(face->glyph->bitmap.pitch);
-            glyph.pixels.resize(size_t(face->glyph->bitmap.width) * face->glyph->bitmap.rows);
-            memcpy(glyph.pixels.data(), face->glyph->bitmap.buffer, glyph.pixels.size());
+
+            auto& bitmap = glyph_bitmaps[glyph.character - FIRST_VALID_CHAR];
+            bitmap.resize(glyph.size.x * glyph.size.y);
+            memcpy(bitmap.data(), face->glyph->bitmap.buffer, bitmap.size());
         }
         space_character_width_ /= NUM_VALID_CHARS; // is the average of displayable character widths
         avg_glyph_aspect_ratio /= NUM_VALID_CHARS;
@@ -144,7 +143,7 @@ public:
         stbrp_setup_allow_out_of_mem(&context, 1);
         stbrp_pack_rects(&context, rects, NUM_VALID_CHARS);
 
-        std::vector<GLubyte> atlas_buffer(size_t(atlas_size) * atlas_size);
+        std::vector<GLubyte> atlas_buffer((size_t)atlas_size * 4 * atlas_size);
         for (stbrp_rect& rect : rects)
         {
             Glyph& glyph = *get(rect.id);
@@ -152,7 +151,10 @@ public:
             {
                 for (int y = 0; y < glyph.size.y; y++)
                 {
-                    atlas_buffer[((size_t)rect.x + x) + ((size_t)rect.y + y) * atlas_size] = glyph.pixels[x + y * (size_t)glyph.abs_pitch];
+                    atlas_buffer[((size_t)rect.x + x) * 4 + 0 + ((size_t)rect.y + y) * atlas_size * 4] = 255;
+                    atlas_buffer[((size_t)rect.x + x) * 4 + 1 + ((size_t)rect.y + y) * atlas_size * 4] = 255;
+                    atlas_buffer[((size_t)rect.x + x) * 4 + 2 + ((size_t)rect.y + y) * atlas_size * 4] = 255;
+                    atlas_buffer[((size_t)rect.x + x) * 4 + 3 + ((size_t)rect.y + y) * atlas_size * 4] = glyph_bitmaps[glyph.character - FIRST_VALID_CHAR][x + y * (size_t)glyph.size.x];
                 }
             }
             glyph.uv_start = Vec2(rect.x, rect.y) / (float)atlas_size;
@@ -162,7 +164,7 @@ public:
         glGenTextures(1, &texture_handle_);
         glBindTexture(GL_TEXTURE_2D, texture_handle_);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, atlas_size, atlas_size, 0, GL_RED, GL_UNSIGNED_BYTE, atlas_buffer.data());
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, atlas_size, atlas_size, 0, GL_RGBA, GL_UNSIGNED_BYTE, atlas_buffer.data());
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);

@@ -67,9 +67,7 @@ void main()
 	}
 	else*/ if (quad_mode() == MODE_FONT)
 	{
-		float glyph_alpha = texture(font_atlas, frag_uv).r;
-		color.w *= glyph_alpha;
-		color.xyz = mix(vec3(0.8), color.xyz, glyph_alpha);
+		color *= texture(font_atlas, frag_uv);
 	}
 	else  if (quad_mode() == MODE_PATH)
 	{
