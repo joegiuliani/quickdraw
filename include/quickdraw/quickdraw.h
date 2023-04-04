@@ -145,8 +145,6 @@ constexpr int MOD_CAPS_LOCK = GLFW_MOD_CAPS_LOCK;
 constexpr int MOD_NUM_LOCK = GLFW_MOD_NUM_LOCK;
 
 using RGBA = glm::vec<4,float,glm::packed_highp>;
-
-// signed (x,y) coordinates in pixels.
 using Vec2 = glm::vec<2, float, glm::packed_highp>;
 
 class AbstractObserver
@@ -166,24 +164,24 @@ enum Axis
 
 namespace window
 {
-    class WindowTerminationObserver : public AbstractObserver
-    {
-    public:
-        virtual void on_window_termination() = 0;
-    };
+class WindowTerminationObserver : public AbstractObserver
+{
+public:
+    virtual void on_window_termination() = 0;
+};
 
-    bool AddWindowTerminationObserver(WindowTerminationObserver* ob);
-    bool RemoveWindowTerminationObserver(WindowTerminationObserver* ob);
+bool AddWindowTerminationObserver(WindowTerminationObserver* ob);
+bool RemoveWindowTerminationObserver(WindowTerminationObserver* ob);
 
-    class WindowResizeObserver : public AbstractObserver
-    {
+class WindowResizeObserver : public AbstractObserver
+{
 
-    public:
-        virtual void on_window_resize() = 0;
-    };
+public:
+    virtual void on_window_resize() = 0;
+};
 
-    bool AddWindowResizeObserver(WindowResizeObserver* ob);
-    bool RemoveWindowResizeObserver(WindowResizeObserver* ob);
+bool AddWindowResizeObserver(WindowResizeObserver* ob);
+bool RemoveWindowResizeObserver(WindowResizeObserver* ob);
 
 using TextureHandle = GLuint;
 
@@ -195,6 +193,9 @@ enum ButtonState
 
 // Returns a non-zero value if there was an issue during initialization.
 bool Init(const char* name, unsigned int width, unsigned int height);
+
+// Returns nullptr before quickdraw::window::Init() is called
+GLFWwindow* GetGLFWWindowHandle();
 
 // - If unable to load the texture, returns an invalid handle defined by TextureHandleIsValid()
 // - File type can be anything supported by stbimage
@@ -238,10 +239,10 @@ double Time();
 // Returns the duration of time since the start of the last frame in seconds
 double DeltaTime();
 
-// Returns the number of frames since the start of the program so that
+// - Returns the number of frames since the start of the program so that
 // 0 is returned during the first frame.
 //
-// A negative number may be returned that the previous frame number is
+// - A negative number may be returned that the previous frame number is
 // always less than the current
 int FrameNumber();
 
@@ -334,8 +335,7 @@ namespace shader
 
     // Sets the thickness of the outline of the rectangle to be drawn
     void SetOutlineThickness(float thickness);
-
-    /*
+    
     // Sets the scale of Text. Make sure to set the desired Text scale before
     // calling TextSize(...)
     void SetTextScale(float s);
@@ -343,7 +343,7 @@ namespace shader
     // Returns the size of the bounding box of str if it were drawn on the screen.
     // Make sure to set the desired Text scale before calling this method.
     Vec2 TextSize(const std::string& str);
-    */
+    
 } // namespace shader
 
 namespace keyboard

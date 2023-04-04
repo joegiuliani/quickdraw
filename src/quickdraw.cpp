@@ -5,7 +5,6 @@
 #include "../include/stb_image.h"
 #define STB_RECT_PACK_IMPLEMENTATION
 #include "../include/stb_rect_pack.h"
-
 #include "../include/glm/geometric.hpp"
 #include <fstream>
 #include <iostream>
@@ -23,7 +22,6 @@ for (arg_observer_type* ob : observers_this_notification)\
 }\
 }
 
-glm::vec2 font_atlas_size;
 namespace quickdraw
 {
 namespace
@@ -53,223 +51,266 @@ namespace window
 {
 namespace
 {
-    constexpr TextureHandle INVALID_TEXTURE_HANDLE = 0;
-    struct Glyph
-    {
-        Vec2 uv_start = Vec2(0);
-        Vec2 uv_end = Vec2(0);
-        Vec2 size = Vec2(0);
-        Vec2 bearing = Vec2(0);
-        float advance = 0;
-        unsigned int abs_pitch = 0;
-        unsigned char* pixels = nullptr;
-    };
-    constexpr int NUM_GLYPHS = 128;
-    Glyph glyphs[NUM_GLYPHS];
-    struct gradient
-    {
-        Axis axis;
-        RGBA start, end;
-    };
-    GLuint TRANSFORM_LOC, PROGRAM_ID;
-    GLuint quad_vao, vertex_dynamic_attribs_vbo, vertex_static_attribs_vbo, vertex_ebo, quad_attribs_ssbo;
-    GLuint BASE_VERTEX_ELEMS[6]{ 2, 1, 0, 2, 0, 3 };
+constexpr TextureHandle INVALID_TEXTURE_HANDLE = 0;
+struct Glyph
+{
+    GLubyte character = 0;
+    Vec2 uv_start = Vec2(0);
+    Vec2 uv_end = Vec2(0);
+    Vec2 size = Vec2(0);
+    Vec2 bearing = Vec2(0);
+    float advance = 0;
+    unsigned int abs_pitch = 0;
+    std::vector<GLubyte> pixels;
+};
 
-    Vec2 VERTEX_UVS[4] =
-    {
-        Vec2(0,0),
-        Vec2(1,0),
-        Vec2(1,1),
-        Vec2(0,1)
-    };
+class FontAtlas
+{
+public:
 
-    struct DynamicVertexAttribs
+    static constexpr bool IsDisplayableChar(unsigned char c)
     {
-        Vec2 pos = Vec2(0);
-        Vec2 uv = Vec2(0);
-        GLfloat corner_mask = 1;
-        RGBA fill_color = RGBA(1, 0, 1, 1);
-        RGBA outline_color = RGBA(1, 0, 1, 1);
-    };
-    struct StaticVertexAttribs
+        return c >= FIRST_VALID_CHAR && c <= LAST_VALID_CHAR;
+    }
+   
+    FontAtlas(int resolution, std::filesystem::path path)
     {
-        GLuint quad_index;
-        StaticVertexAttribs(GLuint t_quad_index) :quad_index(t_quad_index)
+        GLubyte c = FIRST_VALID_CHAR;
+        for (Glyph& g : glyphs_)
         {
+            g.character = c;
+            // ++c
+            c++; // haha nice
         }
-    };
-    constexpr size_t ATTRIBS_PER_QUAD = 7;
-    constexpr size_t VERTS_PER_QUAD = 4;
-    constexpr size_t ELEMS_PER_QUAD = 6;
-    std::vector<DynamicVertexAttribs> vertex_dynamic_attribs_to_draw;
-    std::vector<StaticVertexAttribs> vertex_static_attribs_to_draw;
-    std::vector<GLuint> vertex_elements_to_draw;
-    std::vector<float> quads_attribs_to_draw;
 
-    GLuint font_atlas_handle;
-
-    constexpr float GLOBAL_FONT_SCALE = 1.0f;
-    constexpr float advance_fac = 1.0f / float(1 << 6);
-    float font_resolution = 128;
-    float font_import_scale = 1.0f / font_resolution;
-    float font_offset = 0;
-    float font_height = 0;
-    float font_line_distance = 1;
-    Vec2 font_spacing = Vec2(3);
-  
-    GLFWwindow* window_ptr = nullptr;
-    Vec2 viewport_dim(640, 480);
-    double last_time = 0;
-    double delta_time = 0;
-    unsigned int frame_number = -1;
-    bool scroll_update_received = false;
-    bool cursor_update_received = false;
-    bool mouse_button_update_received = false;
-
-    size_t max_number_of_quads;
-    void glfwErrorCallback(int error, const char* description)
-    {
-        fprintf(stderr, "quickdraw::window GLFW Error %d: %s\n", error, description);
-    }  
-    bool LoadFont(const char* path)
-    {
         FT_Library ft;
-
         if (FT_Init_FreeType(&ft))
         {
-            std::cout << "quickdraw::window Failed to initalize FreeType\n";
-            return false;
+            std::cout << "quickdraw::window::FontAtlas::FontAtlas Failed to initalize FreeType\n";
+            return;
         }
-
+        std::string path_str = path.generic_string();
         FT_Face face;
-        if (FT_New_Face(ft, path, 0, &face))
+        if (FT_New_Face(ft, path_str.c_str(), 0, &face))
         {
-            std::cout << "quickdraw::window Failed to load " << path << '\n';
-            return false;
+            std::cout << "quickdraw::window::FontAtlas::FontAtlas Failed to load " << path << '\n';
+            return;
         }
+        FT_Set_Pixel_Sizes(face, 0, resolution);
 
-        FT_Set_Pixel_Sizes(face, 0, font_resolution);
+        int min_atlas_area = 0;
 
-        Vec2 max_atlas_size = Vec2(0);
+        // width / rows
+        float avg_glyph_aspect_ratio = 0;
 
         // Load displayable characters
-        const int NUM_GLYPHS = 128;
-        for (unsigned char c = 0; c < NUM_GLYPHS; c++)
+        float ADVANCE_FAC = 1.0f / float(1 << 6);
+        for (Glyph& glyph : glyphs_)
         {
-            if (FT_Load_Char(face, c, FT_LOAD_RENDER))
+            if (FT_Load_Char(face, glyph.character, FT_LOAD_RENDER))
             {
-                std::cout << "quickdraw::window Failed to load " << path << '\n';
-                return false;
+                std::cout << "quickdraw::window::FontAtlas::FontAtlas Failed to load " << path << '\n';
+                return;
             }
-
-            max_atlas_size += Vec2(face->glyph->bitmap.width, face->glyph->bitmap.rows);
+            min_atlas_area += face->glyph->bitmap.width * face->glyph->bitmap.rows;
+            avg_glyph_aspect_ratio += float(face->glyph->bitmap.width) / face->glyph->bitmap.rows;
+            space_character_width_ += face->glyph->bitmap.width; // is the average of displayable character widths
 
             // Note we set up the glyph uv's later.
-            glyphs[c].size = Vec2(face->glyph->bitmap.width, face->glyph->bitmap.rows);
-            glyphs[c].bearing = Vec2(face->glyph->bitmap_left, face->glyph->bitmap_top);
-            glyphs[c].advance = face->glyph->advance.x * advance_fac + font_spacing.x;
-            glyphs[c].pixels = face->glyph->bitmap.buffer;
-            glyphs[c].abs_pitch = std::abs(face->glyph->bitmap.pitch);
+            glyph.size = Vec2(face->glyph->bitmap.width, face->glyph->bitmap.rows);
+            glyph.bearing = Vec2(face->glyph->bitmap_left, face->glyph->bitmap_top);
+            glyph.advance = face->glyph->advance.x * ADVANCE_FAC + horizontal_spacing_; // If text quads are positioned incorrectly its probably this
+            glyph.abs_pitch = std::abs(face->glyph->bitmap.pitch);
+            glyph.pixels.resize(size_t(face->glyph->bitmap.width) * face->glyph->bitmap.rows);
+            memcpy(glyph.pixels.data(), face->glyph->bitmap.buffer, glyph.pixels.size());
         }
-        max_atlas_size.x /= 8;
+        space_character_width_ /= NUM_VALID_CHARS; // is the average of displayable character widths
+        avg_glyph_aspect_ratio /= NUM_VALID_CHARS;
+
+        int atlas_size = (sqrt(min_atlas_area) + 1) / avg_glyph_aspect_ratio;
 
         // Pack glyphs into an atlas
         stbrp_context context = {};
-        std::vector<stbrp_node> nodes(max_atlas_size.x);
-        stbrp_rect rects[NUM_GLYPHS] = {};
-        for (int k = 0; k < NUM_GLYPHS; k++)
+        std::vector<stbrp_node> nodes(atlas_size+1);
+        stbrp_rect rects[94] = {};
+        for (Glyph& g : glyphs_)
         {
-            rects[k].w = glyphs[k].size.x;
-            rects[k].h = glyphs[k].size.y;
-            rects[k].id = k;
+            int index = g.character - FIRST_VALID_CHAR;
+            rects[index].id = g.character;
+            rects[index].w = g.size.x;
+            rects[index].h = g.size.y;
         }
-        stbrp_init_target(&context, max_atlas_size.x, max_atlas_size.y, nodes.data(), nodes.size());
-        stbrp_pack_rects(&context, rects, NUM_GLYPHS);
+        stbrp_init_target(&context, atlas_size, atlas_size, nodes.data(), nodes.size());
+        stbrp_setup_allow_out_of_mem(&context, 1);
+        stbrp_pack_rects(&context, rects, NUM_VALID_CHARS);
 
-        // Calculate glyph UV's
-        
-        // Find bounding box of packed glyphs
-        int atlas_width = rects[0].x + rects[0].w;
-        int atlas_height = rects[0].y + rects[0].h;
+        std::vector<GLubyte> atlas_buffer(size_t(atlas_size) * atlas_size);
         for (stbrp_rect& rect : rects)
         {
-            if (!rect.was_packed)
+            Glyph& glyph = *get(rect.id);
+            for (int x = 0; x < glyph.size.x; x++)
             {
-                std::cout << "quickdraw::window Failed to load " << path << "\n";
-                return false;
-            }
-
-            atlas_width = std::max(rect.x + rect.w, atlas_width);
-            atlas_height = std::max(rect.y + rect.h, atlas_height);
-        }
-
-        std::cout << atlas_width << " " << atlas_height << "\n";
- 
-        // Copy glyphs' bitmap data into atlas
-        // and set up glyph UVs
-        std::vector<unsigned char> font_atlas(size_t(atlas_width) * atlas_height);
-        for (stbrp_rect& rect : rects)
-        {
-            for (int x = 0; x < rect.w; x++)
-            {
-                for (int y = 0; y < rect.h; y++)
+                for (int y = 0; y < glyph.size.y; y++)
                 {
-                    font_atlas[(x + rect.x) + (y + rect.y) * atlas_width] = glyphs[rect.id].pixels[x + size_t(y) * rect.w];
+                    atlas_buffer[((size_t)rect.x + x) + ((size_t)rect.y + y) * atlas_size] = glyph.pixels[x + y * (size_t)glyph.abs_pitch];
                 }
             }
-            glyphs[rect.id].uv_start = Vec2((float)rect.x, rect.y) / Vec2((float)atlas_width, atlas_height);
-            glyphs[rect.id].uv_end = Vec2((float)rect.x + rect.w, rect.y + rect.h) / Vec2(atlas_width, atlas_height);
+            glyph.uv_start = Vec2(rect.x, rect.y) / (float)atlas_size;
+            glyph.uv_end = Vec2(rect.x + rect.w, rect.y + rect.h) / (float)atlas_size;
         }
 
-        font_atlas_size = glm::vec2(atlas_width, atlas_height);
-
-        // Send atlas to the gpu
-        glGenTextures(1, &font_atlas_handle);
-        glBindTexture(GL_TEXTURE_2D, font_atlas_handle);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, atlas_width, atlas_height, 0, GL_RED, GL_UNSIGNED_BYTE, font_atlas.data());
+        glGenTextures(1, &texture_handle_);
+        glBindTexture(GL_TEXTURE_2D, texture_handle_);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, atlas_size, atlas_size, 0, GL_RED, GL_UNSIGNED_BYTE, atlas_buffer.data());
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
-        for (Glyph& g : glyphs)
+        float font_import_scale = 1.0f / resolution;
+        for (Glyph& g : glyphs_)
         {
-            g.size    *= font_import_scale;
+            g.size *= font_import_scale;
             g.bearing *= font_import_scale;
             g.advance *= font_import_scale;
         }
+        space_character_width_ *= font_import_scale;
 
         float max_height = 0;
-        for (const auto& g : glyphs)
+        for (const auto& g : glyphs_)
         {
             if (g.size.y > max_height)
             {
                 max_height = g.bearing.y;
             }
         }
-        font_height = max_height;
-        font_offset = max_height * 0.5f;
-        
+        font_height_ = max_height;
+        font_offset_ = max_height * 0.5f;
+
         FT_Done_Face(face);
         FT_Done_FreeType(ft);
 
-        return true;
+        ready_to_use_ = true;
     }
-
-    std::set<WindowResizeObserver*> window_resize_observers;
-    std::set<WindowTerminationObserver*> window_termination_observers;
-    template <typename T> struct StateTracker
+    // Returns this->end() if IsDisplayableChar(c) is false
+    Glyph* get(unsigned char c)
     {
-        T previous;
-        T current;
+        if (!IsDisplayableChar(c))
+            return end();
+        return begin() + (c - FIRST_VALID_CHAR);
+    }
+    Glyph* begin()
+    {
+        return &glyphs_[0];
+    }
+    Glyph* end()
+    {
+        return glyphs_ + NUM_VALID_CHARS;
+    }
+    bool ready_to_use()
+    {
+        return ready_to_use_;
+    }
+    GLuint texture_handle()
+    {
+        return texture_handle_;
+    }
+    float font_offset()
+    {
+        return font_offset_;
+    }
+    float font_height()
+    {
+        return font_height_;
+    }
+    float space_character_width()
+    {
+        return space_character_width_;
+    }
+private:
+    static constexpr unsigned char FIRST_VALID_CHAR = 33;
+    static constexpr unsigned char LAST_VALID_CHAR = 126;
+    static constexpr int NUM_VALID_CHARS = 1 + LAST_VALID_CHAR - FIRST_VALID_CHAR;
+    Glyph glyphs_[NUM_VALID_CHARS];
+    GLuint texture_handle_ = 0;
+    bool ready_to_use_ = false;
+    float horizontal_spacing_ = 3;
+    float font_offset_ = 0;
+    float font_height_ = 0;
+    float space_character_width_ = 0;
+};
+FontAtlas* curr_font_atlas = nullptr;
 
-        void new_state(const T& state)
-        {
-            previous = current;
-            current = state;
-        }
-    };
+struct gradient
+{
+    Axis axis;
+    RGBA start, end;
+};
+
+GLuint TRANSFORM_LOC, PROGRAM_ID;
+GLuint quad_vao, vertex_dynamic_attribs_vbo, vertex_static_attribs_vbo, vertex_ebo, quad_attribs_ssbo;
+GLuint BASE_VERTEX_ELEMS[6]{ 2, 1, 0, 2, 0, 3 };
+
+Vec2 VERTEX_UVS[4] =
+{
+    Vec2(0,0),
+    Vec2(1,0),
+    Vec2(1,1),
+    Vec2(0,1)
+};
+
+struct DynamicVertexAttribs
+{
+    Vec2 pos = Vec2(0);
+    Vec2 uv = Vec2(0);
+    GLfloat corner_mask = 1;
+    RGBA fill_color = RGBA(1, 0, 1, 1);
+    RGBA outline_color = RGBA(1, 0, 1, 1);
+};
+struct StaticVertexAttribs
+{
+    GLuint quad_index;
+    StaticVertexAttribs(GLuint t_quad_index) :quad_index(t_quad_index)
+    {
+    }
+};
+constexpr size_t ATTRIBS_PER_QUAD = 7;
+constexpr size_t VERTS_PER_QUAD = 4;
+constexpr size_t ELEMS_PER_QUAD = 6;
+std::vector<DynamicVertexAttribs> vertex_dynamic_attribs_to_draw;
+std::vector<StaticVertexAttribs> vertex_static_attribs_to_draw;
+std::vector<GLuint> vertex_elements_to_draw;
+std::vector<float> quads_attribs_to_draw;
+  
+GLFWwindow* glfw_window_handle = nullptr;
+Vec2 viewport_dim(640, 480);
+double last_time = 0;
+double delta_time = 0;
+unsigned int frame_number = -1;
+bool scroll_update_received = false;
+bool cursor_update_received = false;
+bool mouse_button_update_received = false;
+size_t max_number_of_quads;
+
+void glfwErrorCallback(int error, const char* description)
+{
+    fprintf(stderr, "quickdraw::window GLFW Error %d: %s\n", error, description);
+}  
+
+std::set<WindowResizeObserver*> window_resize_observers;
+std::set<WindowTerminationObserver*> window_termination_observers;
+template <typename T> struct StateTracker
+{
+    T previous;
+    T current;
+
+    void new_state(const T& state)
+    {
+        previous = current;
+        current = state;
+    }
+};
 
 } // namespace
 
@@ -322,22 +363,88 @@ namespace
     GLFWcursor* cursor_ptrs[6];
     int key_mods = 0;
     std::set<Observer*> observers;
-}
-void Init()
-{
-    for (auto &st : button_states)
-    {
-        st.current = st.previous = UP;
-    }
 
-    for (int k = ARROW; k <= VRESIZE; k++)
+    void ButtonCallback(GLFWwindow* window_ptr, int button, int action, int mods)
     {
-        cursor_ptrs[k - ARROW] = glfwCreateStandardCursor(k);
+        button_states[button].new_state(action);
+        key_mods = mods;
 
-        if (cursor_ptrs[k - ARROW] == NULL)
-            std::cout << "Error creating cursor " << k << "\n";
+        if (IsPressed(Button(button)))
+        {
+            QUICKDRAW_NOTIFY_OBSERVERS(Observer, observers, on_mouse_press);
+
+        }
+        else if (IsReleased(Button(button)))
+        {
+            QUICKDRAW_NOTIFY_OBSERVERS(Observer, observers, on_mouse_release);
+        }
+
+        mouse_button_update_received = true;
+    }
+    void CursorCallback(GLFWwindow* window_ptr, double x, double y)
+    {
+        double mx, my;
+        glfwGetCursorPos(window_ptr, &mx, &my);
+        pos_state.new_state(Vec2(mx, my));
+        delta_state = pos_state.current - pos_state.previous;
+        QUICKDRAW_NOTIFY_OBSERVERS(Observer, observers, on_mouse_move);
+        cursor_update_received = true;
+    }
+    void ScrollCallback(GLFWwindow* window_ptr, double xoffset, double yoffset)
+    {
+        scroll_update_received = true;
+        scroll_state.new_state((int)yoffset);
+        QUICKDRAW_NOTIFY_OBSERVERS(Observer, observers, on_mouse_scroll);
+    }
+    void ProcessEvents()
+    {
+        // Make sure to set scroll state to 0 if we aren't scrolling
+        if (!scroll_update_received && scroll_state.current != 0)
+        {
+            ScrollCallback(glfw_window_handle, 0, 0);
+        }
+
+        // Make sure to set delta to 0 if mouse hasn't moved.
+        if (!cursor_update_received &&delta_state != Vec2(0))
+        {
+            delta_state = Vec2(0);
+        }
+
+        if (!mouse_button_update_received)
+        {
+            for (auto& bs : button_states)
+            {
+                if (bs.current != bs.previous)
+                    bs.new_state(bs.current);
+            }
+        }
+        scroll_update_received = false;
+        cursor_update_received = false;
+        mouse_button_update_received = false;
+    }
+    void Init()
+    {
+        for (auto& st : button_states)
+        {
+            st.current = st.previous = UP;
+        }
+
+        for (int k = ARROW; k <= VRESIZE; k++)
+        {
+            cursor_ptrs[k - ARROW] = glfwCreateStandardCursor(k);
+
+            if (cursor_ptrs[k - ARROW] == NULL)
+                std::cout << "Error creating cursor " << k << "\n";
+        }
+
+        if (glfwRawMouseMotionSupported())
+            glfwSetInputMode(glfw_window_handle, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+        glfwSetScrollCallback(glfw_window_handle, ScrollCallback);
+        glfwSetCursorPosCallback(glfw_window_handle, CursorCallback);
+        glfwSetMouseButtonCallback(glfw_window_handle, ButtonCallback);
     }
 }
+
 bool IsDown()
 {
     for (auto &s : button_states)
@@ -410,79 +517,55 @@ bool RemoveObserver(Observer* ob)
 }
 void SetCursor(Cursor cursor)
 {
-    glfwSetCursor(window_ptr, cursor_ptrs[cursor - ARROW]);
+    glfwSetCursor(glfw_window_handle, cursor_ptrs[cursor - ARROW]);
 }
 void SetCursorEnabled(bool flag)
 {
-    glfwSetInputMode(window_ptr, GLFW_CURSOR, flag ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_HIDDEN);
-}
-void ButtonCallback(GLFWwindow *window_ptr, int button, int action, int mods)
-{
-    button_states[button].new_state(action);
-    key_mods = mods;
-
-    if (IsPressed(Button(button)))
-    {
-        QUICKDRAW_NOTIFY_OBSERVERS(Observer, observers, on_mouse_press);
-
-    }
-    else if (IsReleased(Button(button)))
-    {
-        QUICKDRAW_NOTIFY_OBSERVERS(Observer, observers, on_mouse_release);
-    }
-
-    mouse_button_update_received = true;
-}
-void CursorCallback(GLFWwindow *window_ptr, double x, double y)
-{
-    double mx, my;
-    glfwGetCursorPos(window_ptr, &mx, &my);
-    mouse::pos_state.new_state(Vec2(mx, my));
-    mouse::delta_state = mouse::pos_state.current - mouse::pos_state.previous;
-    QUICKDRAW_NOTIFY_OBSERVERS(Observer, observers, on_mouse_move);
-    cursor_update_received = true;
-}
-void ScrollCallback(GLFWwindow *window_ptr, double xoffset, double yoffset)
-{
-    scroll_update_received = true;
-    mouse::scroll_state.new_state((int)yoffset);
-    QUICKDRAW_NOTIFY_OBSERVERS(Observer, observers, on_mouse_scroll);
+    glfwSetInputMode(glfw_window_handle, GLFW_CURSOR, flag ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_HIDDEN);
 }
 } // namespace mouse
 namespace keyboard
 {
-StateTracker<std::set<int>> down_keys;
-int key_mods = 0;
-std::set<Observer*> observers;
+namespace
+{
+    StateTracker<std::set<int>> down_keys;
+    int key_mods = 0;
+    std::set<Observer*> observers;
+    void KeyCallback(GLFWwindow* window_ptr, int key, int scancode, int action, int mods)
+    {
+        // We don't care about modifier keys. We'll leave that to the mods parameter.
+        if (key >= KEY_LEFT_SHIFT && key <= KEY_RIGHT_SUPER)
+            return;
+
+        key_mods = mods;
+        std::set<int> new_keys = down_keys.current;
+
+        if (action == GLFW_PRESS)
+        {
+            new_keys.insert(key);
+        }
+
+        else if (action == GLFW_RELEASE)
+        {
+            new_keys.erase(key);
+        }
+        down_keys.new_state(new_keys);
+
+        if (down_keys.current.size() > down_keys.previous.size())
+        {
+            QUICKDRAW_NOTIFY_OBSERVERS(Observer, observers, on_keyboard_press);
+
+        }
+    }
+    void Init()
+    {
+        glfwSetKeyCallback(glfw_window_handle, KeyCallback);
+    }
+}
+
 const std::set<int> &DownKeys()
 {
     return down_keys.current;
-}
-void KeyCallback(GLFWwindow *window_ptr, int key, int scancode, int action, int mods)
-{
-    // We don't care about modifier keys. We'll leave that to the mods parameter.
-    if (key >= KEY_LEFT_SHIFT && key <= KEY_RIGHT_SUPER)
-        return;
-
-    key_mods = mods;
-    std::set<int> new_keys = down_keys.current;
-
-    if (action == GLFW_PRESS)
-    {
-        new_keys.insert(key);
-    }
-
-    else if (action == GLFW_RELEASE)
-    {
-        new_keys.erase(key);
-    }
-    down_keys.new_state(new_keys);
-
-    if (down_keys.current.size() > down_keys.previous.size())
-    {
-        QUICKDRAW_NOTIFY_OBSERVERS(Observer, observers, on_keyboard_press);
-
-    }
 }
 bool AddObserver(Observer* ob)
 {
@@ -733,18 +816,30 @@ void SetRectCornerSize(float size)
     curr_quad_attribs[6] = size;
 }
 
-float GetTextWidth(const std::string& Text)
+// Returns 0 if text contains a character without a width
+float GetTextWidth(const std::string& text)
 {
     float ret = 0;
-    for (const char& c : Text)
+    for (const char& c : text)
     {
-        ret += glyphs[(size_t)c].advance;
+        if (!FontAtlas::IsDisplayableChar(c))
+        {
+            if (c == ' ')
+            {
+                ret += curr_font_atlas->space_character_width();
+                continue;
+            }
+
+            std::cout << "quickdraw::window::GetTextWidth Failed to get text width because 'text' argument has a character with no width\n";
+            return 0;
+        }
+        ret += curr_font_atlas->get(c)->advance;
     }
     return ret * curr_text_scale;
 }
 float GetTextHeight()
 {
-    return curr_text_scale * font_height;
+    return curr_text_scale * curr_font_atlas->font_height();
 }
 Vec2 TextSize(const std::string& str)
 {
@@ -788,29 +883,25 @@ bool Init(const char* name, unsigned int width, unsigned int height)
     glfwWindowHint(GLFW_SAMPLES, 16);
     glfwWindowHint(GLFW_DECORATED, true);
 
-    window_ptr = glfwCreateWindow((int)viewport_dim.x, (int)viewport_dim.y, name, NULL, NULL);
-    if (window_ptr == NULL)
+    glfw_window_handle = glfwCreateWindow((int)viewport_dim.x, (int)viewport_dim.y, name, NULL, NULL);
+    if (glfw_window_handle == NULL)
     {
         std::cout << "quickdraw::window Failed to create GLFW window\n";
         return false;
     }
-    glfwMakeContextCurrent(window_ptr);
-    if (glfwRawMouseMotionSupported())
-        glfwSetInputMode(window_ptr, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
-    glfwSetWindowSizeCallback(window_ptr, WindowSizeCallback);
-    glfwSetScrollCallback(window_ptr, mouse::ScrollCallback);
-    glfwSetKeyCallback(window_ptr, keyboard::KeyCallback);
-    glfwSetCursorPosCallback(window_ptr, mouse::CursorCallback);
-    glfwSetMouseButtonCallback(window_ptr, mouse::ButtonCallback);
+    glfwMakeContextCurrent(glfw_window_handle);
+    glfwSetWindowSizeCallback(glfw_window_handle, WindowSizeCallback);
     mouse::Init();
+    keyboard::Init();
 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {
-        std::cout << "quickdraw::window Failed to load OpenGL\n";
+        std::cout << "quickdraw::window::Init Failed to load OpenGL\n";
         return false;
     }
 
-    if (!LoadFont("C:\\Windows\\Fonts\\segoeuil.ttf"))
+    curr_font_atlas = new FontAtlas(64, "C:\\Windows\\Fonts\\segoeuil.ttf");
+    if (!curr_font_atlas->ready_to_use())
     {
         return false;
     }
@@ -819,10 +910,14 @@ bool Init(const char* name, unsigned int width, unsigned int height)
     if (!shader::Init(std::filesystem::current_path() / "resources" / "quad.vert", std::filesystem::current_path() / "resources" / "quad.frag"))
         return false;
 
-    WindowSizeCallback(window_ptr, (int)viewport_dim.x, (int)viewport_dim.y);
+    WindowSizeCallback(glfw_window_handle, (int)viewport_dim.x, (int)viewport_dim.y);
     last_time = glfwGetTime();
 
     return true;
+}
+GLFWwindow* GetGLFWWindowHandle()
+{
+    return glfw_window_handle;
 }
 void NewFrame()
 {
@@ -832,29 +927,7 @@ void NewFrame()
 
     glfwPollEvents();
 
-    // Make sure to set scroll state to 0 if we aren't scrolling
-    if (!scroll_update_received && mouse::scroll_state.current != 0)
-    {
-        mouse::ScrollCallback(window_ptr, 0, 0);
-    }
-
-    // Make sure to set delta to 0 if mouse hasn't moved.
-    if (!cursor_update_received && mouse::delta_state != Vec2(0))
-    {
-        mouse::delta_state = Vec2(0);
-    }
-
-    if (!mouse_button_update_received)
-    {
-        for (auto& bs : mouse::button_states)
-        {
-            if (bs.current != bs.previous)
-                bs.new_state(bs.current);
-        }
-    }
-    scroll_update_received = false;
-    cursor_update_received = false;
-    mouse_button_update_received = false;   
+    mouse::ProcessEvents(); 
 }
 void DrawFrame()
 {
@@ -866,11 +939,9 @@ void DrawFrame()
     glDisable(GL_SCISSOR_TEST);
     glActiveTexture(GL_TEXTURE0);
 
-    glBindTexture(GL_TEXTURE_2D, font_atlas_handle);
+    glBindTexture(GL_TEXTURE_2D, curr_font_atlas->texture_handle());
 
     shader::Activate();
-
-    DrawRect(Vec2(0, 0), font_atlas_size);
 
     size_t num_verts_this_frame = vertex_dynamic_attribs_to_draw.size();
     size_t num_quads_this_frame = num_verts_this_frame / VERTS_PER_QUAD;
@@ -928,16 +999,17 @@ void DrawFrame()
     quads_attribs_to_draw.clear();
     vertex_dynamic_attribs_to_draw.clear();
 
-    glfwSwapBuffers(window_ptr);
+    glfwSwapBuffers(glfw_window_handle);
     glClearColor(0.5, 0.5, 0.5, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 bool ShouldClose()
 {
-    return glfwWindowShouldClose(window_ptr);
+    return glfwWindowShouldClose(glfw_window_handle);
 }
 void Terminate()
 {
+    delete curr_font_atlas;
     glfwTerminate();
 }
 void SetWindowIcon(TextureHandle handle)
@@ -953,7 +1025,7 @@ void SetWindowIcon(TextureHandle handle)
     glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, window_icon_data.data());
     GLFWimage window_icon{width, height, window_icon_data.data()};
 
-    glfwSetWindowIcon(window_ptr, 1, &window_icon);
+    glfwSetWindowIcon(glfw_window_handle, 1, &window_icon);
 }
 void DrawRect(const Vec2& pos, const Vec2& size)
 {
@@ -971,8 +1043,7 @@ void DrawRect(const Vec2& pos, const Vec2& size)
 
     DrawQuad();
 }
-
-void DrawText(const Vec2& pos, const std::string &Text)
+void DrawText(const Vec2& pos, const std::string &text)
 {
     using namespace shader;
     SetQuadMode(TEXT_MODE);
@@ -982,10 +1053,21 @@ void DrawText(const Vec2& pos, const std::string &Text)
 
     float curs = 0;
 
-    for (const char &c : Text)
+    for (char c : text)
     {
-        Glyph& glyph = glyphs[(size_t)c];
-        float offset = (font_height - glyph.bearing.y - font_offset) * curr_text_scale;
+        if (!FontAtlas::IsDisplayableChar(c))
+        {
+            if (c == ' ')
+            {
+                curs += curr_font_atlas->space_character_width() * curr_text_scale;
+                continue;
+            }
+
+            std::cout << "quickdraw::window::DrawText Failed to draw text because 'text' argument has a non-displayable character\n";
+            return;
+        }
+        Glyph& glyph = *curr_font_atlas->get(c);
+        float offset = (curr_font_atlas->font_height() - glyph.bearing.y - curr_font_atlas->font_offset()) * curr_text_scale;
 
         Vec2 quad_top_left(pos.x + glyph.bearing.x * curr_text_scale + curs, pos.y + offset);
         Vec2 quad_bottom_right = quad_top_left + Vec2(glyph.size) * curr_text_scale;
@@ -1007,7 +1089,6 @@ void DrawText(const Vec2& pos, const std::string &Text)
         curs += glyph.advance * curr_text_scale;
     }
 }
-
 void DrawPath(const std::vector<Vec2> &points, float thickness, const Vec2& offset)
 {
     /*
@@ -1201,3 +1282,5 @@ bool RemoveWindowResizeObserver(WindowResizeObserver* ob)
 } // namespace window
 
 }
+
+

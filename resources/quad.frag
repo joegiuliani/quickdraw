@@ -69,7 +69,7 @@ void main()
 	{
 		float glyph_alpha = texture(font_atlas, frag_uv).r;
 		color.w *= glyph_alpha;
-		color.xyz = mix(color.xyz, vec3(frag_uv.x > 0.5,0,frag_uv.x < 0.5), 1.0-glyph_alpha*0.95);
+		color.xyz = mix(vec3(0.8), color.xyz, glyph_alpha);
 	}
 	else  if (quad_mode() == MODE_PATH)
 	{
@@ -113,5 +113,5 @@ void main()
 		}
 	}
 
-	color_out = texture(font_atlas, frag_uv);
+	color_out = color;
 }
