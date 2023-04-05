@@ -164,6 +164,7 @@ enum Axis
 
 namespace window
 {
+
 class WindowTerminationObserver : public AbstractObserver
 {
 public:
@@ -183,7 +184,12 @@ public:
 bool AddWindowResizeObserver(WindowResizeObserver* ob);
 bool RemoveWindowResizeObserver(WindowResizeObserver* ob);
 
-using TextureHandle = GLuint;
+struct Texture
+{
+    int width;
+    int height;
+    std::vector<GLubyte> bitmap;
+};
 
 enum ButtonState
 {
@@ -197,18 +203,14 @@ bool Init(const char* name, unsigned int width, unsigned int height);
 // Returns nullptr before quickdraw::window::Init() is called
 GLFWwindow* GetGLFWWindowHandle();
 
-// - If unable to load the texture, returns an invalid handle defined by TextureHandleIsValid()
+// - Returns a pointer to the texture and whether it was successfully loaded
 // - File type can be anything supported by stbimage
-// - output_dimensions can be nullptr
-TextureHandle LoadTexture(std::filesystem::path file, Vec2* output_dimensions);
-void UnloadTexture(TextureHandle* handle);
-
-// Returns true if the value of the handle is valid for functions in this library
-bool TextureHandleIsValid(TextureHandle handle);
+const Texture* LoadTexture(std::filesystem::path file);
+void UnloadTexture(const Texture* texture);
 
 // TODO add scissor functionality for font shadows
 
-void SetWindowIcon(TextureHandle image);
+void SetWindowIcon(std::filesystem::path file);
 
 // Updates frame information and polls input events
 void NewFrame();

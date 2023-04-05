@@ -51,10 +51,8 @@ namespace window
 {
 namespace
 {
-constexpr TextureHandle INVALID_TEXTURE_HANDLE = 0;
 struct Glyph
 {
-    GLubyte character = 0;
     Vec2 uv_start = Vec2(0);
     Vec2 uv_end = Vec2(0);
     Vec2 size = Vec2(0);
@@ -73,14 +71,6 @@ public:
    
     FontAtlas(int resolution, std::filesystem::path path)
     {
-        GLubyte c = FIRST_VALID_CHAR;
-        for (Glyph& g : glyphs_)
-        {
-            g.character = c;
-            // ++c
-            c++; // haha nice
-        }
-
         FT_Library ft;
         if (FT_Init_FreeType(&ft))
         {
@@ -103,9 +93,10 @@ public:
 
         // Load displayable characters
         float ADVANCE_FAC = 1.0f / float(1 << 6);
-        for (Glyph& glyph : glyphs_)
+        for (int k = 0; k < NUM_VALID_CHARS; k++)
         {
-            if (FT_Load_Char(face, glyph.character, FT_LOAD_RENDER))
+            Glyph& glyph = glyphs_[k];
+            if (FT_Load_Char(face, k + FIRST_VALID_CHAR, FT_LOAD_RENDER))
             {
                 std::cout << "quickdraw::window::FontAtlas::FontAtlas Failed to load " << path << '\n';
                 return;
@@ -119,57 +110,22 @@ public:
             glyph.bearing = Vec2(face->glyph->bitmap_left, face->glyph->bitmap_top);
             glyph.advance = face->glyph->advance.x * ADVANCE_FAC + horizontal_spacing_; // If text quads are positioned incorrectly its probably this
 
-            auto& bitmap = glyph_bitmaps[glyph.character - FIRST_VALID_CHAR];
-            bitmap.resize(glyph.size.x * glyph.size.y);
-            memcpy(bitmap.data(), face->glyph->bitmap.buffer, bitmap.size());
-        }
-        space_character_width_ /= NUM_VALID_CHARS; // is the average of displayable character widths
-        avg_glyph_aspect_ratio /= NUM_VALID_CHARS;
-
-        int atlas_size = (sqrt(min_atlas_area) + 1) / avg_glyph_aspect_ratio;
-
-        // Pack glyphs into an atlas
-        stbrp_context context = {};
-        std::vector<stbrp_node> nodes(atlas_size+1);
-        stbrp_rect rects[94] = {};
-        for (Glyph& g : glyphs_)
-        {
-            int index = g.character - FIRST_VALID_CHAR;
-            rects[index].id = g.character;
-            rects[index].w = g.size.x;
-            rects[index].h = g.size.y;
-        }
-        stbrp_init_target(&context, atlas_size, atlas_size, nodes.data(), nodes.size());
-        stbrp_setup_allow_out_of_mem(&context, 1);
-        stbrp_pack_rects(&context, rects, NUM_VALID_CHARS);
-
-        std::vector<GLubyte> atlas_buffer((size_t)atlas_size * 4 * atlas_size);
-        for (stbrp_rect& rect : rects)
-        {
-            Glyph& glyph = *get(rect.id);
+            std::vector<GLubyte> bitmap(glyph.size.x * glyph.size.y * 4);
             for (int x = 0; x < glyph.size.x; x++)
             {
                 for (int y = 0; y < glyph.size.y; y++)
                 {
-                    atlas_buffer[((size_t)rect.x + x) * 4 + 0 + ((size_t)rect.y + y) * atlas_size * 4] = 255;
-                    atlas_buffer[((size_t)rect.x + x) * 4 + 1 + ((size_t)rect.y + y) * atlas_size * 4] = 255;
-                    atlas_buffer[((size_t)rect.x + x) * 4 + 2 + ((size_t)rect.y + y) * atlas_size * 4] = 255;
-                    atlas_buffer[((size_t)rect.x + x) * 4 + 3 + ((size_t)rect.y + y) * atlas_size * 4] = glyph_bitmaps[glyph.character - FIRST_VALID_CHAR][x + y * (size_t)glyph.size.x];
+                    bitmap[x + y * glyph.size.x * 4 + 0] = 1;
+                    bitmap[x + y * glyph.size.x * 4 + 1] = 1;
+                    bitmap[x + y * glyph.size.x * 4 + 2] = 1;
+                    bitmap[x + y * glyph.size.x * 4 + 3] = face->glyph->bitmap.buffer[x + y * (int)glyph.size.x];
                 }
             }
-            glyph.uv_start = Vec2(rect.x, rect.y) / (float)atlas_size;
-            glyph.uv_end = Vec2(rect.x + rect.w, rect.y + rect.h) / (float)atlas_size;
+
+            LoadTexture(glyph.size.x, glyph.size.y, bitmap);
         }
-
-        glGenTextures(1, &texture_handle_);
-        glBindTexture(GL_TEXTURE_2D, texture_handle_);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, atlas_size, atlas_size, 0, GL_RGBA, GL_UNSIGNED_BYTE, atlas_buffer.data());
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
+        space_character_width_ /= NUM_VALID_CHARS; // is the average of displayable character widths
+        
         float font_import_scale = 1.0f / resolution;
         for (Glyph& g : glyphs_)
         {
@@ -214,7 +170,7 @@ public:
     {
         return ready_to_use_;
     }
-    GLuint texture_handle()
+    const Texture* texture_handle()
     {
         return texture_handle_;
     }
@@ -235,14 +191,105 @@ private:
     static constexpr unsigned char LAST_VALID_CHAR = 126;
     static constexpr int NUM_VALID_CHARS = 1 + LAST_VALID_CHAR - FIRST_VALID_CHAR;
     Glyph glyphs_[NUM_VALID_CHARS];
-    GLuint texture_handle_ = 0;
     bool ready_to_use_ = false;
     float horizontal_spacing_ = 3;
     float font_offset_ = 0;
     float font_height_ = 0;
     float space_character_width_ = 0;
+    const Texture* texture_handle_ = nullptr;
 };
+
 FontAtlas* curr_font_atlas = nullptr;
+
+struct Subtexture
+{
+    Texture local_texture;
+    Vec2 uv_start;
+    Vec2 uv_end;
+};
+
+std::list<Subtexture> atlas_subtextures;
+GLuint texture_atlas_handle = 0;
+
+const Texture* LoadTexture(int width, int height, std::vector<GLubyte> rgba_bitmap)
+{
+    Subtexture& new_subtexture = atlas_subtextures.emplace_back(Subtexture());
+    new_subtexture.local_texture.width = width;
+    new_subtexture.local_texture.height = height;
+    new_subtexture.local_texture.bitmap = rgba_bitmap;
+    return &new_subtexture.local_texture;
+}
+
+void PackTextures()
+{
+    size_t sum_widths = 0;
+    size_t sum_heights = 0;
+    size_t sum_areas = 0;
+    for (Subtexture& subtexture : atlas_subtextures)
+    {
+        sum_widths += subtexture.local_texture.width;
+        sum_heights += subtexture.local_texture.height;
+        sum_areas += subtexture.local_texture.width * subtexture.local_texture.height;
+    }
+
+    size_t packing_area = sum_areas;
+    double aspect_ratio = double(sum_widths) / sum_heights;
+    int packing_width = sqrt(packing_area * aspect_ratio);
+    int packing_height = packing_width / aspect_ratio;
+
+    stbrp_context packing_context = {};
+    std::vector<stbrp_node> packing_nodes(packing_width); // Good practice according to stb_rect_pack documentation
+    std::vector<stbrp_rect> packing_rects(atlas_subtextures.size());
+    
+    int rect_index = 0;
+    for (Subtexture& subtexture : atlas_subtextures)
+    {
+        packing_rects[rect_index].w = subtexture.local_texture.width;
+        packing_rects[rect_index].h = subtexture.local_texture.height;
+        ++rect_index;
+    }
+    stbrp_init_target(&packing_context, packing_width, packing_height, packing_nodes.data(), packing_nodes.size());
+    stbrp_setup_allow_out_of_mem(&packing_context, 1);
+    stbrp_pack_rects(&packing_context, packing_rects.data(), packing_rects.size());
+
+    int min_atlas_width = 0;
+    int min_atlas_height = 0;
+    for (auto& rect : packing_rects)
+    {
+        min_atlas_width = std::max(rect.x + rect.w, min_atlas_width);
+        min_atlas_height = std::max(rect.y + rect.h, min_atlas_height);
+    }
+
+    std::vector<GLubyte> atlas_buffer(min_atlas_width * 4 * min_atlas_height);
+    rect_index = 0;
+    for (auto& subtexture : atlas_subtextures)
+    {
+
+        int atlas_x = packing_rects[rect_index].x;
+        int atlas_y = packing_rects[rect_index].y;
+
+        // Copy bitmap data into CPU atlas buffer
+        for (int x = 0; x < subtexture.local_texture.width; x++)
+        {
+            for (int y = 0; y < subtexture.local_texture.height; y++)
+            {
+                for (int c = 0; c < 4; c++)
+                {
+                    atlas_buffer[x + atlas_x + (y + atlas_y) * min_atlas_width * 4 + c] = subtexture.local_texture.bitmap[x + y * subtexture.local_texture.width * 4 + c];
+                }
+            }
+        }
+
+        // Set UV coordinates for sub textures
+        subtexture.uv_start = Vec2(atlas_x / (double)min_atlas_width, atlas_y / (double)min_atlas_height);
+        subtexture.uv_end = Vec2((atlas_x + subtexture.local_texture.width) / (double)min_atlas_width, (atlas_y + subtexture.local_texture.height) / (double)min_atlas_height);
+
+        ++rect_index;
+    }
+
+    glBindTexture(GL_TEXTURE_2D, texture_atlas_handle);
+    glTexImage2D(GL_ACTIVE_TEXTURE, 0, GL_RGBA, min_atlas_width, min_atlas_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, atlas_buffer.data());
+}
 
 struct gradient
 {
@@ -316,43 +363,32 @@ template <typename T> struct StateTracker
 
 } // namespace
 
-TextureHandle LoadTexture(std::filesystem::path file, Vec2* output_dimensions)
+// Note this does not automatically add the texture to the atlas
+const Texture* LoadTexture(std::filesystem::path file)
 {
-    TextureHandle return_handle;
     GLsizei width, height;
     auto file_str = file.string();
     unsigned char* char_buffer = stbi_load(file_str.c_str(), &width, &height, nullptr, 4);
     if (char_buffer == NULL)
     {
-        return INVALID_TEXTURE_HANDLE;
+        return nullptr;
     }
-
-    if (output_dimensions != nullptr)
-        *output_dimensions = Vec2(width, height);
-
-    glGenTextures(1, &return_handle);
-    glBindTexture(GL_TEXTURE_2D, return_handle);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, char_buffer);
-    glGenerateMipmap(GL_TEXTURE_2D);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
+    std::vector<GLubyte> rgba_bitmap(char_buffer, char_buffer + (size_t)width * height * 4);
     stbi_image_free(char_buffer);
 
-    return return_handle;
+    return LoadTexture(width, height, rgba_bitmap);
 }
-void UnloadTexture(TextureHandle* handle)
+void UnloadTexture(const Texture* handle)
 {
-    glDeleteTextures(1, handle);
+    for (Subtexture& subtexture : atlas_subtextures)
+    {
+        if (&subtexture.local_texture == handle)
+        {
+            atlas_subtextures.remove(subtexture);
+            break;
+        }
+    }
 }
-bool TextureHandleIsValid(TextureHandle handle)
-{
-    return handle != INVALID_TEXTURE_HANDLE;
-}
-
 namespace mouse
 {   
 namespace 
@@ -902,6 +938,8 @@ bool Init(const char* name, unsigned int width, unsigned int height)
         return false;
     }
 
+    glGenTextures(1, &texture_atlas_handle);
+
     curr_font_atlas = new FontAtlas(64, "C:\\Windows\\Fonts\\segoeuil.ttf");
     if (!curr_font_atlas->ready_to_use())
     {
@@ -941,7 +979,7 @@ void DrawFrame()
     glDisable(GL_SCISSOR_TEST);
     glActiveTexture(GL_TEXTURE0);
 
-    glBindTexture(GL_TEXTURE_2D, curr_font_atlas->texture_handle());
+    glBindTexture(GL_TEXTURE_2D, texture_atlas_handle);
 
     shader::Activate();
 
@@ -1014,11 +1052,9 @@ void Terminate()
     delete curr_font_atlas;
     glfwTerminate();
 }
+/*
 void SetWindowIcon(TextureHandle handle)
 {
-    if (!TextureHandleIsValid(handle))
-        return;
-
     glBindTexture(GL_TEXTURE_2D, handle);
     int width, height;
     glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width);
@@ -1028,7 +1064,7 @@ void SetWindowIcon(TextureHandle handle)
     GLFWimage window_icon{width, height, window_icon_data.data()};
 
     glfwSetWindowIcon(glfw_window_handle, 1, &window_icon);
-}
+}*/
 void DrawRect(const Vec2& pos, const Vec2& size)
 {
     using namespace shader;
