@@ -1,10 +1,10 @@
 #include "../include/quickdraw/quickdraw.h"
-#include "../include/ft2build.h"
-#include FT_FREETYPE_H
 #define STB_IMAGE_IMPLEMENTATION
 #include "../include/stb_image.h"
 #define STB_RECT_PACK_IMPLEMENTATION
 #include "../include/stb_rect_pack.h"
+#include "../include/ft2build.h"
+#include FT_FREETYPE_H
 #include "../include/glm/geometric.hpp"
 #include <fstream>
 #include <iostream>
@@ -12,6 +12,7 @@
 #include <vector>
 #include <filesystem>
 #include <array>
+#include <stack>
 
 #define QUICKDRAW_NOTIFY_OBSERVERS(arg_observer_type, arg_observers, arg_member_function) \
 {\
@@ -26,35 +27,13 @@ namespace quickdraw
 {
 namespace
 {
-Vec2 Normal(const Vec2& slope)
-{
-    return Vec2(slope.y, -slope.x) / glm::length(slope);
-}
-bool IsValidSize(const Vec2& size)
-{
-    return size.x >= 0 && size.y >= 0;
-}
-bool IsValidTextureSize(const Vec2& size)
-{
-    return IsValidSize(size) && size.x >= 1 && size.y >= 1;
-}
-} // namespace
-void AbstractObserver::set_enabled(bool flag)
-{
-    enabled_ = flag;
-}
-bool AbstractObserver::enabled()
-{
-    return enabled_;
-}
-namespace window
-{
-namespace
-{
+GLuint texture_atlas_handle = 0;
+std::list<Texture> atlas_textures;
+bool atlas_updated = false;
+
 struct Glyph
 {
-    Vec2 uv_start = Vec2(0);
-    Vec2 uv_end = Vec2(0);
+    Texture* texture = nullptr;
     Vec2 size = Vec2(0);
     Vec2 bearing = Vec2(0);
     float advance = 0;
@@ -64,128 +43,17 @@ class FontAtlas
 {
 public:
 
-    static constexpr bool IsDisplayableChar(unsigned char c)
-    {
-        return c >= FIRST_VALID_CHAR && c <= LAST_VALID_CHAR;
-    }
+    static constexpr bool IsDisplayableChar(unsigned char c);
    
-    FontAtlas(int resolution, std::filesystem::path path)
-    {
-        FT_Library ft;
-        if (FT_Init_FreeType(&ft))
-        {
-            std::cout << "quickdraw::window::FontAtlas::FontAtlas Failed to initalize FreeType\n";
-            return;
-        }
-        std::string path_str = path.generic_string();
-        FT_Face face;
-        if (FT_New_Face(ft, path_str.c_str(), 0, &face))
-        {
-            std::cout << "quickdraw::window::FontAtlas::FontAtlas Failed to load " << path << '\n';
-            return;
-        }
-        FT_Set_Pixel_Sizes(face, 0, resolution);
-
-        std::vector<GLubyte> glyph_bitmaps[NUM_VALID_CHARS];
-        int min_atlas_area = 0;
-        // width / rows
-        float avg_glyph_aspect_ratio = 0;
-
-        // Load displayable characters
-        float ADVANCE_FAC = 1.0f / float(1 << 6);
-        for (int k = 0; k < NUM_VALID_CHARS; k++)
-        {
-            Glyph& glyph = glyphs_[k];
-            if (FT_Load_Char(face, k + FIRST_VALID_CHAR, FT_LOAD_RENDER))
-            {
-                std::cout << "quickdraw::window::FontAtlas::FontAtlas Failed to load " << path << '\n';
-                return;
-            }
-            min_atlas_area += face->glyph->bitmap.width * face->glyph->bitmap.rows;
-            avg_glyph_aspect_ratio += float(face->glyph->bitmap.width) / face->glyph->bitmap.rows;
-            space_character_width_ += face->glyph->bitmap.width; // is the average of displayable character widths
-
-            // Note we set up the glyph uv's later.
-            glyph.size = Vec2(face->glyph->bitmap.width, face->glyph->bitmap.rows);
-            glyph.bearing = Vec2(face->glyph->bitmap_left, face->glyph->bitmap_top);
-            glyph.advance = face->glyph->advance.x * ADVANCE_FAC + horizontal_spacing_; // If text quads are positioned incorrectly its probably this
-
-            std::vector<GLubyte> bitmap(glyph.size.x * glyph.size.y * 4);
-            for (int x = 0; x < glyph.size.x; x++)
-            {
-                for (int y = 0; y < glyph.size.y; y++)
-                {
-                    bitmap[x + y * glyph.size.x * 4 + 0] = 1;
-                    bitmap[x + y * glyph.size.x * 4 + 1] = 1;
-                    bitmap[x + y * glyph.size.x * 4 + 2] = 1;
-                    bitmap[x + y * glyph.size.x * 4 + 3] = face->glyph->bitmap.buffer[x + y * (int)glyph.size.x];
-                }
-            }
-
-            LoadTexture(glyph.size.x, glyph.size.y, bitmap);
-        }
-        space_character_width_ /= NUM_VALID_CHARS; // is the average of displayable character widths
-        
-        float font_import_scale = 1.0f / resolution;
-        for (Glyph& g : glyphs_)
-        {
-            g.size *= font_import_scale;
-            g.bearing *= font_import_scale;
-            g.advance *= font_import_scale;
-        }
-        space_character_width_ *= font_import_scale;
-
-        float max_height = 0;
-        for (const auto& g : glyphs_)
-        {
-            if (g.size.y > max_height)
-            {
-                max_height = g.bearing.y;
-            }
-        }
-        font_height_ = max_height;
-        font_offset_ = max_height * 0.5f;
-
-        FT_Done_Face(face);
-        FT_Done_FreeType(ft);
-
-        ready_to_use_ = true;
-    }
+    FontAtlas(int resolution, std::filesystem::path path);
     // Returns this->end() if IsDisplayableChar(c) is false
-    Glyph* get(unsigned char c)
-    {
-        if (!IsDisplayableChar(c))
-            return end();
-        return begin() + (c - FIRST_VALID_CHAR);
-    }
-    Glyph* begin()
-    {
-        return &glyphs_[0];
-    }
-    Glyph* end()
-    {
-        return glyphs_ + NUM_VALID_CHARS;
-    }
-    bool ready_to_use()
-    {
-        return ready_to_use_;
-    }
-    const Texture* texture_handle()
-    {
-        return texture_handle_;
-    }
-    float font_offset()
-    {
-        return font_offset_;
-    }
-    float font_height()
-    {
-        return font_height_;
-    }
-    float space_character_width()
-    {
-        return space_character_width_;
-    }
+    Glyph* get(unsigned char c);
+    Glyph* begin();
+    Glyph* end();
+    bool ready_to_use();
+    float font_offset();
+    float font_height();
+    float space_character_width();
 private:
     static constexpr unsigned char FIRST_VALID_CHAR = 33;
     static constexpr unsigned char LAST_VALID_CHAR = 126;
@@ -196,108 +64,13 @@ private:
     float font_offset_ = 0;
     float font_height_ = 0;
     float space_character_width_ = 0;
-    const Texture* texture_handle_ = nullptr;
 };
+
+RGBA background_color = RGBA(0);
 
 FontAtlas* curr_font_atlas = nullptr;
 
-struct Subtexture
-{
-    Texture local_texture;
-    Vec2 uv_start;
-    Vec2 uv_end;
-};
-
-std::list<Subtexture> atlas_subtextures;
-GLuint texture_atlas_handle = 0;
-
-const Texture* LoadTexture(int width, int height, std::vector<GLubyte> rgba_bitmap)
-{
-    Subtexture& new_subtexture = atlas_subtextures.emplace_back(Subtexture());
-    new_subtexture.local_texture.width = width;
-    new_subtexture.local_texture.height = height;
-    new_subtexture.local_texture.bitmap = rgba_bitmap;
-    return &new_subtexture.local_texture;
-}
-
-void PackTextures()
-{
-    size_t sum_widths = 0;
-    size_t sum_heights = 0;
-    size_t sum_areas = 0;
-    for (Subtexture& subtexture : atlas_subtextures)
-    {
-        sum_widths += subtexture.local_texture.width;
-        sum_heights += subtexture.local_texture.height;
-        sum_areas += subtexture.local_texture.width * subtexture.local_texture.height;
-    }
-
-    size_t packing_area = sum_areas;
-    double aspect_ratio = double(sum_widths) / sum_heights;
-    int packing_width = sqrt(packing_area * aspect_ratio);
-    int packing_height = packing_width / aspect_ratio;
-
-    stbrp_context packing_context = {};
-    std::vector<stbrp_node> packing_nodes(packing_width); // Good practice according to stb_rect_pack documentation
-    std::vector<stbrp_rect> packing_rects(atlas_subtextures.size());
-    
-    int rect_index = 0;
-    for (Subtexture& subtexture : atlas_subtextures)
-    {
-        packing_rects[rect_index].w = subtexture.local_texture.width;
-        packing_rects[rect_index].h = subtexture.local_texture.height;
-        ++rect_index;
-    }
-    stbrp_init_target(&packing_context, packing_width, packing_height, packing_nodes.data(), packing_nodes.size());
-    stbrp_setup_allow_out_of_mem(&packing_context, 1);
-    stbrp_pack_rects(&packing_context, packing_rects.data(), packing_rects.size());
-
-    int min_atlas_width = 0;
-    int min_atlas_height = 0;
-    for (auto& rect : packing_rects)
-    {
-        min_atlas_width = std::max(rect.x + rect.w, min_atlas_width);
-        min_atlas_height = std::max(rect.y + rect.h, min_atlas_height);
-    }
-
-    std::vector<GLubyte> atlas_buffer(min_atlas_width * 4 * min_atlas_height);
-    rect_index = 0;
-    for (auto& subtexture : atlas_subtextures)
-    {
-
-        int atlas_x = packing_rects[rect_index].x;
-        int atlas_y = packing_rects[rect_index].y;
-
-        // Copy bitmap data into CPU atlas buffer
-        for (int x = 0; x < subtexture.local_texture.width; x++)
-        {
-            for (int y = 0; y < subtexture.local_texture.height; y++)
-            {
-                for (int c = 0; c < 4; c++)
-                {
-                    atlas_buffer[x + atlas_x + (y + atlas_y) * min_atlas_width * 4 + c] = subtexture.local_texture.bitmap[x + y * subtexture.local_texture.width * 4 + c];
-                }
-            }
-        }
-
-        // Set UV coordinates for sub textures
-        subtexture.uv_start = Vec2(atlas_x / (double)min_atlas_width, atlas_y / (double)min_atlas_height);
-        subtexture.uv_end = Vec2((atlas_x + subtexture.local_texture.width) / (double)min_atlas_width, (atlas_y + subtexture.local_texture.height) / (double)min_atlas_height);
-
-        ++rect_index;
-    }
-
-    glBindTexture(GL_TEXTURE_2D, texture_atlas_handle);
-    glTexImage2D(GL_ACTIVE_TEXTURE, 0, GL_RGBA, min_atlas_width, min_atlas_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, atlas_buffer.data());
-}
-
-struct gradient
-{
-    Axis axis;
-    RGBA start, end;
-};
-
-GLuint TRANSFORM_LOC, PROGRAM_ID;
+GLuint TRANSFORM_LOC, SHADER_HANDLE;
 GLuint quad_vao, vertex_dynamic_attribs_vbo, vertex_static_attribs_vbo, vertex_ebo, quad_attribs_ssbo;
 GLuint BASE_VERTEX_ELEMS[6]{ 2, 1, 0, 2, 0, 3 };
 
@@ -342,11 +115,6 @@ bool cursor_update_received = false;
 bool mouse_button_update_received = false;
 size_t max_number_of_quads;
 
-void glfwErrorCallback(int error, const char* description)
-{
-    fprintf(stderr, "quickdraw::window GLFW Error %d: %s\n", error, description);
-}  
-
 std::set<WindowResizeObserver*> window_resize_observers;
 std::set<WindowTerminationObserver*> window_termination_observers;
 template <typename T> struct StateTracker
@@ -360,207 +128,56 @@ template <typename T> struct StateTracker
         current = state;
     }
 };
+float curr_text_scale = 24;
+constexpr GLuint RECT_MODE = 0,
+                 TEXTURE_MODE = 1,
+                 PATH_MODE = 2;
 
+DynamicVertexAttribs curr_vertex_attribs[VERTS_PER_QUAD];
+float curr_quad_attribs[ATTRIBS_PER_QUAD];
+
+bool Init(const std::filesystem::path& vert_path, const std::filesystem::path& frag_path);
+void Activate();
+/**
+* Must be one of RECT_MODE, TEXTURE_MODE, PATH_MODE
+*/
+void SetQuadMode(GLuint mode);
+void SetRectPosAndSize(const Vec2& pos, const Vec2& size);
+void SetPathThickness(float thickness);
+void DrawQuad();
+Vec2 Normal(const Vec2& slope);
+std::pair<Texture*, Vec2> LoadTexture(int width, int height, std::vector<GLubyte> rgba_bitmap);
+void PackTextures();
+void glfwErrorCallback(int error, const char* description);
+void WindowSizeCallback(GLFWwindow* window_ptr, int width, int height);
 } // namespace
-
-// Note this does not automatically add the texture to the atlas
-const Texture* LoadTexture(std::filesystem::path file)
+struct Texture
 {
-    GLsizei width, height;
-    auto file_str = file.string();
-    unsigned char* char_buffer = stbi_load(file_str.c_str(), &width, &height, nullptr, 4);
-    if (char_buffer == NULL)
-    {
-        return nullptr;
-    }
-    std::vector<GLubyte> rgba_bitmap(char_buffer, char_buffer + (size_t)width * height * 4);
-    stbi_image_free(char_buffer);
-
-    return LoadTexture(width, height, rgba_bitmap);
-}
-void UnloadTexture(const Texture* handle)
-{
-    for (Subtexture& subtexture : atlas_subtextures)
-    {
-        if (&subtexture.local_texture == handle)
-        {
-            atlas_subtextures.remove(subtexture);
-            break;
-        }
-    }
-}
+    std::vector<GLubyte> bitmap = std::vector<GLubyte>(0);
+    Vec2 uv_start = Vec2(0);
+    Vec2 uv_end = Vec2(0);
+    int width = 0;
+    int height = 0;
+};
 namespace mouse
-{   
-namespace 
 {
-    StateTracker<Vec2> pos_state;
-    Vec2 delta_state;
-    constexpr int NUM_BUTTONS = 3;
-    StateTracker<int> button_states[NUM_BUTTONS];
-    StateTracker<int> scroll_state;
-    GLFWcursor* cursor_ptrs[6];
-    int key_mods = 0;
-    std::set<Observer*> observers;
+namespace
+{
+StateTracker<Vec2> pos_state;
+Vec2 delta_state;
+constexpr int NUM_BUTTONS = 3;
+StateTracker<int> button_states[NUM_BUTTONS];
+StateTracker<int> scroll_state;
+GLFWcursor* cursor_ptrs[6];
+int key_mods = 0;
+std::set<Observer*> observers;
 
-    void ButtonCallback(GLFWwindow* window_ptr, int button, int action, int mods)
-    {
-        button_states[button].new_state(action);
-        key_mods = mods;
-
-        if (IsPressed(Button(button)))
-        {
-            QUICKDRAW_NOTIFY_OBSERVERS(Observer, observers, on_mouse_press);
-
-        }
-        else if (IsReleased(Button(button)))
-        {
-            QUICKDRAW_NOTIFY_OBSERVERS(Observer, observers, on_mouse_release);
-        }
-
-        mouse_button_update_received = true;
-    }
-    void CursorCallback(GLFWwindow* window_ptr, double x, double y)
-    {
-        double mx, my;
-        glfwGetCursorPos(window_ptr, &mx, &my);
-        pos_state.new_state(Vec2(mx, my));
-        delta_state = pos_state.current - pos_state.previous;
-        QUICKDRAW_NOTIFY_OBSERVERS(Observer, observers, on_mouse_move);
-        cursor_update_received = true;
-    }
-    void ScrollCallback(GLFWwindow* window_ptr, double xoffset, double yoffset)
-    {
-        scroll_update_received = true;
-        scroll_state.new_state((int)yoffset);
-        QUICKDRAW_NOTIFY_OBSERVERS(Observer, observers, on_mouse_scroll);
-    }
-    void ProcessEvents()
-    {
-        // Make sure to set scroll state to 0 if we aren't scrolling
-        if (!scroll_update_received && scroll_state.current != 0)
-        {
-            ScrollCallback(glfw_window_handle, 0, 0);
-        }
-
-        // Make sure to set delta to 0 if mouse hasn't moved.
-        if (!cursor_update_received &&delta_state != Vec2(0))
-        {
-            delta_state = Vec2(0);
-        }
-
-        if (!mouse_button_update_received)
-        {
-            for (auto& bs : button_states)
-            {
-                if (bs.current != bs.previous)
-                    bs.new_state(bs.current);
-            }
-        }
-        scroll_update_received = false;
-        cursor_update_received = false;
-        mouse_button_update_received = false;
-    }
-    void Init()
-    {
-        for (auto& st : button_states)
-        {
-            st.current = st.previous = UP;
-        }
-
-        for (int k = ARROW; k <= VRESIZE; k++)
-        {
-            cursor_ptrs[k - ARROW] = glfwCreateStandardCursor(k);
-
-            if (cursor_ptrs[k - ARROW] == NULL)
-                std::cout << "Error creating cursor " << k << "\n";
-        }
-
-        if (glfwRawMouseMotionSupported())
-            glfwSetInputMode(glfw_window_handle, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
-        glfwSetScrollCallback(glfw_window_handle, ScrollCallback);
-        glfwSetCursorPosCallback(glfw_window_handle, CursorCallback);
-        glfwSetMouseButtonCallback(glfw_window_handle, ButtonCallback);
-    }
-}
-
-bool IsDown()
-{
-    for (auto &s : button_states)
-    {
-        if (s.current == DOWN)
-        {
-            return true;
-        }
-    }
-
-    return false;
-}
-bool IsDown(int button)
-{
-    return button_states[button].current == DOWN;
-}
-bool IsPressed()
-{
-    for (auto &s : button_states)
-    {
-        if (s.current == DOWN && s.previous == UP)
-            return true;
-    }
-    return false;
-}
-bool IsReleased()
-{
-    for (auto &s : button_states)
-    {
-        if (s.current == UP && s.previous == DOWN)
-            return true;
-    }
-    return false;
-}
-bool IsDown(Button b)
-{
-    return button_states[b].current == DOWN;
-}
-bool IsPressed(Button b)
-{
-    return button_states[b].current == DOWN && button_states[b].previous == UP;
-}
-bool IsReleased(Button b)
-{
-    return button_states[b].current == UP && button_states[b].previous == DOWN;
-}
-bool IsMoving()
-{
-    return delta_state != Vec2(0);
-}
-Vec2 Delta()
-{
-    return delta_state;
-}
-Vec2 Pos()
-{
-    return pos_state.current;
-}
-int ScrollDir()
-{
-    return scroll_state.current;
-}
-bool AddObserver(Observer* ob)
-{
-    return observers.insert(ob).second;
-}
-bool RemoveObserver(Observer* ob)
-{
-    return observers.erase(ob);
-}
-void SetCursor(Cursor cursor)
-{
-    glfwSetCursor(glfw_window_handle, cursor_ptrs[cursor - ARROW]);
-}
-void SetCursorEnabled(bool flag)
-{
-    glfwSetInputMode(glfw_window_handle, GLFW_CURSOR, flag ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_HIDDEN);
-}
+void ButtonCallback(GLFWwindow* window_ptr, int button, int action, int mods);
+void CursorCallback(GLFWwindow* window_ptr, double x, double y);
+void ScrollCallback(GLFWwindow* window_ptr, double xoffset, double yoffset);
+void ProcessEvents();
+void Init();
+} // namespace
 } // namespace mouse
 namespace keyboard
 {
@@ -569,292 +186,309 @@ namespace
     StateTracker<std::set<int>> down_keys;
     int key_mods = 0;
     std::set<Observer*> observers;
-    void KeyCallback(GLFWwindow* window_ptr, int key, int scancode, int action, int mods)
-    {
-        // We don't care about modifier keys. We'll leave that to the mods parameter.
-        if (key >= KEY_LEFT_SHIFT && key <= KEY_RIGHT_SUPER)
-            return;
-
-        key_mods = mods;
-        std::set<int> new_keys = down_keys.current;
-
-        if (action == GLFW_PRESS)
-        {
-            new_keys.insert(key);
-        }
-
-        else if (action == GLFW_RELEASE)
-        {
-            new_keys.erase(key);
-        }
-        down_keys.new_state(new_keys);
-
-        if (down_keys.current.size() > down_keys.previous.size())
-        {
-            QUICKDRAW_NOTIFY_OBSERVERS(Observer, observers, on_keyboard_press);
-
-        }
-    }
-    void Init()
-    {
-        glfwSetKeyCallback(glfw_window_handle, KeyCallback);
-    }
-}
-
-const std::set<int> &DownKeys()
-{
-    return down_keys.current;
-}
-bool AddObserver(Observer* ob)
-{
-    return observers.insert(ob).second;
-}
-bool RemoveObserver(Observer* ob)
-{
-    return observers.erase(ob);
-}
-int KeyModifiers()
-{
-    return key_mods;
-}
+    void KeyCallback(GLFWwindow* window_ptr, int key, int scancode, int action, int mods);
+    void Init();
+} // namespace
 } // namespace keyboard
-namespace shader
+}
+
+namespace quickdraw
 {
 namespace
-{   
-    float curr_text_scale = 24;
-    constexpr GLuint RECT_MODE = 0;
-    // constexpr GLuint TEXTURE_MODE = 1,
-    constexpr GLuint TEXT_MODE = 2;
-    constexpr GLuint PATH_MODE = 3;
-
-    DynamicVertexAttribs curr_vertex_attribs[VERTS_PER_QUAD];
-    float curr_quad_attribs[ATTRIBS_PER_QUAD];
-
-    bool Init(const std::filesystem::path& vert_path, const std::filesystem::path& frag_path)
+{
+constexpr bool FontAtlas::IsDisplayableChar(unsigned char c)
+{
+    return c >= FIRST_VALID_CHAR && c <= LAST_VALID_CHAR;
+}
+FontAtlas::FontAtlas(int resolution, std::filesystem::path path)
+{
+    FT_Library ft;
+    if (FT_Init_FreeType(&ft))
     {
-        // Load shader program
-        std::string vert_code, frag_code;
-        std::ifstream vert_file, frag_file;
+        std::cout << "quickdraw::FontAtlas::FontAtlas Failed to initalize FreeType\n";
+        return;
+    }
+    std::string path_str = path.generic_string();
+    FT_Face face;
+    if (FT_New_Face(ft, path_str.c_str(), 0, &face))
+    {
+        std::cout << "quickdraw::FontAtlas::FontAtlas Failed to load " << path << '\n';
+        return;
+    }
+    FT_Set_Pixel_Sizes(face, 0, resolution);
 
-        vert_file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-        frag_file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+    std::vector<GLubyte> glyph_bitmaps[NUM_VALID_CHARS];
+    int min_atlas_area = 0;
+    // width / rows
+    float avg_glyph_aspect_ratio = 0;
 
-        try
+    // Load displayable characters
+    float ADVANCE_FAC = 1.0f / float(1 << 6);
+    for (int k = 0; k < NUM_VALID_CHARS; k++)
+    {
+        Glyph& glyph = glyphs_[k];
+        if (FT_Load_Char(face, k + FIRST_VALID_CHAR, FT_LOAD_RENDER))
         {
-            vert_file.open(vert_path);
-            frag_file.open(frag_path);
-            std::stringstream vert_stream, frag_stream;
-            vert_stream << vert_file.rdbuf();
-            frag_stream << frag_file.rdbuf();
-            vert_file.close();
-            frag_file.close();
-            vert_code = vert_stream.str();
-            frag_code = frag_stream.str();
+            std::cout << "quickdraw::FontAtlas::FontAtlas Failed to load \'" << (char)(k + FIRST_VALID_CHAR) << "\'\n";
+            return;
         }
-        catch (std::ifstream::failure& e)
-        {
-            std::cout << "shader file could not be read"
-                << "\n"
-                << e.what() << "\n";
-        }
+        min_atlas_area += face->glyph->bitmap.width * face->glyph->bitmap.rows;
+        avg_glyph_aspect_ratio += float(face->glyph->bitmap.width) / face->glyph->bitmap.rows;
+        space_character_width_ += face->glyph->bitmap.width; // is the average of displayable character widths
 
-        auto check_for_errors = [&](GLuint shader_id, const std::string& shader_type) -> bool
+        // Note we set up the glyph uv's later.
+        glyph.size = Vec2(face->glyph->bitmap.width, face->glyph->bitmap.rows);
+        glyph.bearing = Vec2(face->glyph->bitmap_left, face->glyph->bitmap_top);
+        glyph.advance = face->glyph->advance.x * ADVANCE_FAC + horizontal_spacing_; // If text quads are positioned incorrectly its probably this
+
+        std::vector<GLubyte> bitmap(glyph.size.x * NUM_PIXEL_CHANNELS * glyph.size.y);
+        for (int x = 0; x < glyph.size.x; x++)
         {
-            GLint success;
-            const size_t LOG_SIZE = 4096;
-            char log[LOG_SIZE];
-            if (shader_type == "PROGRAM")
+            for (int y = 0; y < glyph.size.y; y++)
             {
-                glGetProgramiv(shader_id, GL_LINK_STATUS, &success);
-                if (!success)
-                {
-                    glGetProgramInfoLog(shader_id, LOG_SIZE, NULL, log);
-                    std::cout << "Could not link " << shader_type << "\n" << log << "\n";
-                    return false;
-                }
+                bitmap[(x + y * glyph.size.x) * NUM_PIXEL_CHANNELS + 0] = 255;
+                bitmap[(x + y * glyph.size.x) * NUM_PIXEL_CHANNELS + 1] = 255;
+                bitmap[(x + y * glyph.size.x) * NUM_PIXEL_CHANNELS + 2] = 255;
+                bitmap[(x + y * glyph.size.x) * NUM_PIXEL_CHANNELS + 3] = face->glyph->bitmap.buffer[x + y * (int)glyph.size.x];
             }
-            else
-            {
-                glGetShaderiv(shader_id, GL_COMPILE_STATUS, &success);
-                if (!success)
-                {
-                    glGetShaderInfoLog(shader_id, LOG_SIZE, NULL, log);
-                    std::cout << "Could not compile " << shader_type << "\n" << log << "\n";
-                    return false;
-                }
-            }
+        }
 
-            return true;
-        };
-
-        const char* vertex_code_cstr = vert_code.c_str();
-        const char* fragment_code_cstr = frag_code.c_str();
-
-        unsigned int vertex, fragment;
-        vertex = glCreateShader(GL_VERTEX_SHADER);
-        glShaderSource(vertex, 1, &vertex_code_cstr, NULL);
-        glCompileShader(vertex);
-        if (!check_for_errors(vertex, "Vertex Shader"))
-            return false;
-        fragment = glCreateShader(GL_FRAGMENT_SHADER);
-        glShaderSource(fragment, 1, &fragment_code_cstr, NULL);
-        glCompileShader(fragment);
-        if (!check_for_errors(fragment, "Fragment Shader"))
-            return false;
-        PROGRAM_ID = glCreateProgram();
-        glAttachShader(PROGRAM_ID, vertex);
-        glAttachShader(PROGRAM_ID, fragment);
-        glLinkProgram(PROGRAM_ID);
-        if (!check_for_errors(PROGRAM_ID, "Shader program"))
-            return false;
-
-        glDeleteShader(vertex);
-        glDeleteShader(fragment);
-        glUseProgram(PROGRAM_ID);
-
-        TRANSFORM_LOC = glGetUniformLocation(PROGRAM_ID, "transform");
-
-        glGenVertexArrays(1, &quad_vao);
-        glGenBuffers(1, &vertex_dynamic_attribs_vbo);
-        glGenBuffers(1, &vertex_static_attribs_vbo);
-        glGenBuffers(1, &vertex_ebo);
-        glGenBuffers(1, &quad_attribs_ssbo);
-       
-        glBindVertexArray(quad_vao);
-        glBindBuffer(GL_ARRAY_BUFFER, vertex_dynamic_attribs_vbo);
-        glBindBuffer(GL_ARRAY_BUFFER, vertex_static_attribs_vbo);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vertex_ebo);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, quad_attribs_ssbo);
-        
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, quad_attribs_ssbo);
-        
-        // Configure dynamic vertex attributes
-        glBindBuffer(GL_ARRAY_BUFFER, vertex_dynamic_attribs_vbo);
-
-        GLuint vertex_pos_loc = glGetAttribLocation(PROGRAM_ID, "pos");
-        glEnableVertexAttribArray(vertex_pos_loc);
-        glVertexAttribPointer(vertex_pos_loc, 2, GL_FLOAT, GL_FALSE, sizeof(DynamicVertexAttribs), (void*)offsetof(DynamicVertexAttribs, DynamicVertexAttribs::pos));
-
-        GLuint vertex_corner_mask_loc = glGetAttribLocation(PROGRAM_ID, "corner_mask");
-        glEnableVertexAttribArray(vertex_corner_mask_loc);
-        glVertexAttribPointer(vertex_corner_mask_loc, 1, GL_FLOAT, GL_FALSE, sizeof(DynamicVertexAttribs), (void*)offsetof(DynamicVertexAttribs, DynamicVertexAttribs::corner_mask));
-
-        GLuint vertex_fill_color_loc = glGetAttribLocation(PROGRAM_ID, "fill_color");
-        glEnableVertexAttribArray(vertex_fill_color_loc);
-        glVertexAttribPointer(vertex_fill_color_loc, 4, GL_FLOAT, GL_FALSE, sizeof(DynamicVertexAttribs), (void*)offsetof(DynamicVertexAttribs, DynamicVertexAttribs::fill_color));
-        
-        GLuint vertex_outline_color_loc = glGetAttribLocation(PROGRAM_ID, "outline_color");
-        glEnableVertexAttribArray(vertex_outline_color_loc);
-        glVertexAttribPointer(vertex_outline_color_loc, 4, GL_FLOAT, GL_FALSE, sizeof(DynamicVertexAttribs), (void*)offsetof(DynamicVertexAttribs, DynamicVertexAttribs::outline_color));
-        
-        GLuint vertex_uv_loc = glGetAttribLocation(PROGRAM_ID, "uv");
-        glEnableVertexAttribArray(vertex_uv_loc);
-        glVertexAttribPointer(vertex_uv_loc, 2, GL_FLOAT, GL_FALSE, sizeof(DynamicVertexAttribs), (void*)offsetof(DynamicVertexAttribs, DynamicVertexAttribs::uv));
-
-        // -----------
-       
-        // Configure static vertex attributes
-        glBindBuffer(GL_ARRAY_BUFFER, vertex_static_attribs_vbo);
-
-        GLuint vertex_quad_index_loc = glGetAttribLocation(PROGRAM_ID, "quad_index");
-        glEnableVertexAttribArray(vertex_quad_index_loc);
-        glVertexAttribIPointer(vertex_quad_index_loc, 1, GL_UNSIGNED_INT, sizeof(StaticVertexAttribs), (void*)offsetof(StaticVertexAttribs, StaticVertexAttribs::quad_index));
-        
-        return true;
-    }
-    void Activate()
-    {
-        glUseProgram(PROGRAM_ID);
-    }
-
-    /**
-    * Must be one of RECT_MODE, PATH_MODE
-    */
-    void SetQuadMode(GLuint mode)
-    {
-        curr_quad_attribs[4] = mode;
-
-        if (mode == RECT_MODE || mode == PATH_MODE)
+        glyph.texture = LoadTexture(glyph.size.x, glyph.size.y, bitmap).first;
+        if (glyph.texture == nullptr)
         {
-            curr_vertex_attribs[TOP_LEFT].uv = Vec2(0, 0);
-            curr_vertex_attribs[TOP_RIGHT].uv = Vec2(1, 0);
-            curr_vertex_attribs[BOTTOM_RIGHT].uv = Vec2(1, 1);
-            curr_vertex_attribs[BOTTOM_LEFT].uv = Vec2(0, 1);
+            std::cout << "quickdraw::FontAtlas::FontAtlas Failed to load \'" << path << "\'\n";
+            return;
         }
     }
-    void SetRectPos(const Vec2& pos)
+    space_character_width_ /= NUM_VALID_CHARS; // is the average of displayable character widths
+
+    float font_import_scale = 1.0f / resolution;
+    for (Glyph& g : glyphs_)
     {
-        curr_quad_attribs[0] = pos.x;
-        curr_quad_attribs[1] = pos.y;
+        g.size *= font_import_scale;
+        g.bearing *= font_import_scale;
+        g.advance *= font_import_scale;
     }
-    void SetRectSize(const Vec2& size)
+    space_character_width_ *= font_import_scale;
+
+    float max_height = 0;
+    for (const auto& g : glyphs_)
     {
-        curr_quad_attribs[2] = size.x;
-        curr_quad_attribs[3] = size.y;
+        if (g.size.y > max_height)
+        {
+            max_height = g.bearing.y;
+        }
     }
-    void SetPathThickness(float thickness)
+    font_height_ = max_height;
+    font_offset_ = max_height * 0.5f;
+
+    FT_Done_Face(face);
+    FT_Done_FreeType(ft);
+
+    ready_to_use_ = true;
+}
+// Returns this->end() if IsDisplayableChar(c) is false
+Glyph* FontAtlas::get(unsigned char c)
+{
+    if (!IsDisplayableChar(c))
+        return end();
+    return begin() + (c - FIRST_VALID_CHAR);
+}
+Glyph* FontAtlas::begin()
+{
+    return &glyphs_[0];
+}
+Glyph* FontAtlas::end()
+{
+    return glyphs_ + NUM_VALID_CHARS;
+}
+bool FontAtlas::ready_to_use()
+{
+    return ready_to_use_;
+}
+float FontAtlas::font_offset()
+{
+    return font_offset_;
+}
+float FontAtlas::font_height()
+{
+    return font_height_;
+}
+float FontAtlas::space_character_width()
+{
+    return space_character_width_;
+}
+bool InitOpenGL()
+{
+    const char* METHOD_ERROR_HEADER = "quickdraw::InitOpenGL ";
+
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {
-        curr_quad_attribs[2] = thickness;
+        std::cout << "quickdraw::InitOpenGL Failed to load OpenGL\n";
+        return false;
     }
 
-    void DrawQuad()
+    std::filesystem::path vertex_shader_path = std::filesystem::current_path() / "resources" / "quad.vert";
+    std::filesystem::path fragment_shader_path = std::filesystem::current_path() / "resources" / "quad.frag";
+
+    // Load shader program
+    std::string vert_code, frag_code;
+    std::ifstream vert_file, frag_file;
+
+    vert_file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+    frag_file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+
+    try
     {
-        using namespace shader;
+        vert_file.open(vertex_shader_path);
+        frag_file.open(fragment_shader_path);
+        std::stringstream vert_stream, frag_stream;
+        vert_stream << vert_file.rdbuf();
+        frag_stream << frag_file.rdbuf();
+        vert_file.close();
+        frag_file.close();
+        vert_code = vert_stream.str();
+        frag_code = frag_stream.str();
+    }
+    catch (std::ifstream::failure& e)
+    {
+        std::cout << METHOD_ERROR_HEADER << "Failed to read shader file\n"
+            << e.what() << "\n";
+        return false;
+    }
 
-        vertex_dynamic_attribs_to_draw.emplace_back(curr_vertex_attribs[TOP_LEFT]);
-        vertex_dynamic_attribs_to_draw.emplace_back(curr_vertex_attribs[TOP_RIGHT]);
-        vertex_dynamic_attribs_to_draw.emplace_back(curr_vertex_attribs[BOTTOM_RIGHT]);
-        vertex_dynamic_attribs_to_draw.emplace_back(curr_vertex_attribs[BOTTOM_LEFT]);
+    const char* vertex_code_cstr = vert_code.c_str();
+    const char* fragment_code_cstr = frag_code.c_str();
+    GLint success_flag;
+    const size_t LOG_SIZE = 4096;
+    char log[LOG_SIZE];
+    unsigned int vertex, fragment;
+    vertex = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertex, 1, &vertex_code_cstr, NULL);
+    glCompileShader(vertex);
+    glGetShaderiv(vertex, GL_COMPILE_STATUS, &success_flag);
+    if (!success_flag)
+    {
+        glGetShaderInfoLog(vertex, LOG_SIZE, NULL, log);
+        std::cout << METHOD_ERROR_HEADER << "Failed to compile vertex shader\n" << log << "\n";
+        return false;
+    }
+    fragment = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragment, 1, &fragment_code_cstr, NULL);
+    glCompileShader(fragment);
+    glGetShaderiv(vertex, GL_COMPILE_STATUS, &success_flag);
+    if (!success_flag)
+    {
+        glGetShaderInfoLog(vertex, LOG_SIZE, NULL, log);
+        std::cout << METHOD_ERROR_HEADER << "Failed to compile fragment shader\n" << log << "\n";
+        return false;
+    }
+    SHADER_HANDLE = glCreateProgram();
+    glAttachShader(SHADER_HANDLE, vertex);
+    glAttachShader(SHADER_HANDLE, fragment);
+    glLinkProgram(SHADER_HANDLE);
+    glGetProgramiv(SHADER_HANDLE, GL_LINK_STATUS, &success_flag);
+    if (!success_flag)
+    {
+        glGetProgramInfoLog(SHADER_HANDLE, LOG_SIZE, NULL, log);
+        std::cout << METHOD_ERROR_HEADER << "Failed to link shader program\n" << log << '\n';
+        return false;
+    }
 
-        for (float& attrib : curr_quad_attribs)
-            quads_attribs_to_draw.emplace_back(attrib);
+    glDeleteShader(vertex);
+    glDeleteShader(fragment);
+    glUseProgram(SHADER_HANDLE);
+
+    TRANSFORM_LOC = glGetUniformLocation(SHADER_HANDLE, "transform");
+
+    glGenVertexArrays(1, &quad_vao);
+    glGenBuffers(1, &vertex_dynamic_attribs_vbo);
+    glGenBuffers(1, &vertex_static_attribs_vbo);
+    glGenBuffers(1, &vertex_ebo);
+    glGenBuffers(1, &quad_attribs_ssbo);
+
+    glBindVertexArray(quad_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, vertex_dynamic_attribs_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, vertex_static_attribs_vbo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vertex_ebo);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, quad_attribs_ssbo);
+
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, quad_attribs_ssbo);
+
+    // Configure dynamic vertex attributes
+    glBindBuffer(GL_ARRAY_BUFFER, vertex_dynamic_attribs_vbo);
+
+    GLuint vertex_pos_loc = glGetAttribLocation(SHADER_HANDLE, "pos");
+    glEnableVertexAttribArray(vertex_pos_loc);
+    glVertexAttribPointer(vertex_pos_loc, 2, GL_FLOAT, GL_FALSE, sizeof(DynamicVertexAttribs), (void*)offsetof(DynamicVertexAttribs, DynamicVertexAttribs::pos));
+
+    GLuint vertex_corner_mask_loc = glGetAttribLocation(SHADER_HANDLE, "corner_mask");
+    glEnableVertexAttribArray(vertex_corner_mask_loc);
+    glVertexAttribPointer(vertex_corner_mask_loc, 1, GL_FLOAT, GL_FALSE, sizeof(DynamicVertexAttribs), (void*)offsetof(DynamicVertexAttribs, DynamicVertexAttribs::corner_mask));
+
+    GLuint vertex_fill_color_loc = glGetAttribLocation(SHADER_HANDLE, "fill_color");
+    glEnableVertexAttribArray(vertex_fill_color_loc);
+    glVertexAttribPointer(vertex_fill_color_loc, 4, GL_FLOAT, GL_FALSE, sizeof(DynamicVertexAttribs), (void*)offsetof(DynamicVertexAttribs, DynamicVertexAttribs::fill_color));
+
+    GLuint vertex_outline_color_loc = glGetAttribLocation(SHADER_HANDLE, "outline_color");
+    glEnableVertexAttribArray(vertex_outline_color_loc);
+    glVertexAttribPointer(vertex_outline_color_loc, 4, GL_FLOAT, GL_FALSE, sizeof(DynamicVertexAttribs), (void*)offsetof(DynamicVertexAttribs, DynamicVertexAttribs::outline_color));
+
+    GLuint vertex_uv_loc = glGetAttribLocation(SHADER_HANDLE, "uv");
+    glEnableVertexAttribArray(vertex_uv_loc);
+    glVertexAttribPointer(vertex_uv_loc, 2, GL_FLOAT, GL_FALSE, sizeof(DynamicVertexAttribs), (void*)offsetof(DynamicVertexAttribs, DynamicVertexAttribs::uv));
+
+
+    // Configure static vertex attributes
+    glBindBuffer(GL_ARRAY_BUFFER, vertex_static_attribs_vbo);
+
+    GLuint vertex_quad_index_loc = glGetAttribLocation(SHADER_HANDLE, "quad_index");
+    glEnableVertexAttribArray(vertex_quad_index_loc);
+    glVertexAttribIPointer(vertex_quad_index_loc, 1, GL_UNSIGNED_INT, sizeof(StaticVertexAttribs), (void*)offsetof(StaticVertexAttribs, StaticVertexAttribs::quad_index));
+
+    return true;
+}
+/**
+* Must be one of RECT_MODE, TEXTURE_MODE, PATH_MODE
+*/
+void SetQuadMode(GLuint mode)
+{
+    curr_quad_attribs[4] = mode;
+
+    if (mode == RECT_MODE || mode == PATH_MODE)
+    {
+        curr_vertex_attribs[UPPER_START].uv = Vec2(0, 0);
+        curr_vertex_attribs[UPPER_END].uv = Vec2(1, 0);
+        curr_vertex_attribs[LOWER_END].uv = Vec2(1, 1);
+        curr_vertex_attribs[LOWER_START].uv = Vec2(0, 1);
     }
 }
+void SetRectPosAndSize(const Vec2& pos, const Vec2& size)
+{
+    curr_quad_attribs[0] = pos.x;
+    curr_quad_attribs[1] = pos.y;
+    curr_quad_attribs[2] = size.x;
+    curr_quad_attribs[3] = size.y;
 
-void SetFillColor(const RGBA& color, VertexIndex index)
+    curr_vertex_attribs[UPPER_START].pos = pos + size * Vec2(0, 0);
+    curr_vertex_attribs[UPPER_END].pos = pos + size * Vec2(1, 0);
+    curr_vertex_attribs[LOWER_END].pos = pos + size * Vec2(1, 1);
+    curr_vertex_attribs[LOWER_START].pos = pos + size * Vec2(0, 1);
+}
+void SetPathThickness(float thickness)
 {
-    curr_vertex_attribs[index].fill_color = color;
+    curr_quad_attribs[2] = thickness;
 }
-void SetFillColor(const RGBA& color)
+void DrawQuad()
 {
-    SetFillColor(color, TOP_LEFT);
-    SetFillColor(color, TOP_RIGHT);
-    SetFillColor(color, BOTTOM_RIGHT);
-    SetFillColor(color, BOTTOM_LEFT);
-}
-void SetOutlineColor(const RGBA& color, VertexIndex index)
-{
-    curr_vertex_attribs[index].outline_color = color;
-}
-void SetOutlineColor(const RGBA& color)
-{    
-    SetOutlineColor(color, TOP_LEFT);
-    SetOutlineColor(color, TOP_RIGHT);
-    SetOutlineColor(color, BOTTOM_RIGHT);
-    SetOutlineColor(color, BOTTOM_LEFT);
-}
-void SetRectCornerMask(bool mask, VertexIndex index)
-{
-    curr_vertex_attribs[index].corner_mask = mask;
-}
-void SetRectCornerMask(bool mask)
-{
-    SetRectCornerMask(mask, TOP_LEFT);
-    SetRectCornerMask(mask, TOP_RIGHT);
-    SetRectCornerMask(mask, BOTTOM_RIGHT);
-    SetRectCornerMask(mask, BOTTOM_LEFT);
-}
-void SetOutlineThickness(float thickness)
-{
-    curr_quad_attribs[5] = thickness;
-}
-void SetRectCornerSize(float size)
-{
-    curr_quad_attribs[6] = size;
-}
+    vertex_dynamic_attribs_to_draw.emplace_back(curr_vertex_attribs[UPPER_START]);
+    vertex_dynamic_attribs_to_draw.emplace_back(curr_vertex_attribs[UPPER_END]);
+    vertex_dynamic_attribs_to_draw.emplace_back(curr_vertex_attribs[LOWER_END]);
+    vertex_dynamic_attribs_to_draw.emplace_back(curr_vertex_attribs[LOWER_START]);
 
-// Returns 0 if text contains a character without a width
+    for (float& attrib : curr_quad_attribs)
+        quads_attribs_to_draw.emplace_back(attrib);
+}
 float GetTextWidth(const std::string& text)
 {
     float ret = 0;
@@ -868,7 +502,7 @@ float GetTextWidth(const std::string& text)
                 continue;
             }
 
-            std::cout << "quickdraw::window::GetTextWidth Failed to get text width because 'text' argument has a character with no width\n";
+            std::cout << "quickdraw::GetTextWidth Failed to get text width because 'text' argument has a character with no width\n";
             return 0;
         }
         ret += curr_font_atlas->get(c)->advance;
@@ -879,34 +513,111 @@ float GetTextHeight()
 {
     return curr_text_scale * curr_font_atlas->font_height();
 }
-Vec2 TextSize(const std::string& str)
+Vec2 Normal(const Vec2& slope)
 {
-    return Vec2(GetTextWidth(str), GetTextHeight());
+    return Vec2(slope.y, -slope.x) / glm::length(slope);
 }
-void SetTextScale(float s)
+std::pair<Texture*, Vec2> LoadTexture(int width, int height, std::vector<GLubyte> rgba_bitmap)
 {
-    curr_text_scale = s;
+    if (width < 1 || height < 1)
+    {
+        std::cout << "quickdraw::LoadTexture Failed to load texture because width or height was less than 1\n";
+        return std::pair(nullptr, Vec2(0));
+    }
+    Texture& new_texture = atlas_textures.emplace_back();
+    atlas_updated = true;
+    new_texture.width = width;
+    new_texture.height = height;
+    new_texture.bitmap = rgba_bitmap;
+    return std::pair(&new_texture, Vec2(width, height));
 }
+void PackTextures()
+{
 
-} // namespace shader
+    size_t sum_widths = 0;
+    size_t sum_heights = 0;
+    int max_height = 0;
+    for (Texture& texture : atlas_textures)
+    {
+        sum_widths += texture.width;
+        sum_heights += texture.height;
+        max_height = std::max(texture.height, max_height);
+    }
 
-void WindowSizeCallback(GLFWwindow *window_ptr, int width, int height)
+    size_t packing_area = sum_widths * max_height;
+
+    double aspect_ratio = double(sum_widths) / sum_heights;
+    int packing_width = sqrt(packing_area * aspect_ratio);
+    int packing_height = packing_width / aspect_ratio;
+
+    stbrp_context packing_context = {};
+    std::vector<stbrp_node> packing_nodes(packing_width); // Good practice according to stb_rect_pack documentation
+    std::vector<stbrp_rect> packing_rects(atlas_textures.size());
+
+    int rect_index = 0;
+    for (Texture& texture : atlas_textures)
+    {
+        packing_rects[rect_index].w = texture.width;
+        packing_rects[rect_index].h = texture.height;
+        ++rect_index;
+    }
+    stbrp_init_target(&packing_context, packing_width, packing_height, packing_nodes.data(), packing_nodes.size());
+    stbrp_setup_allow_out_of_mem(&packing_context, 1);
+    stbrp_pack_rects(&packing_context, packing_rects.data(), packing_rects.size());
+
+    int min_atlas_width = 0;
+    int min_atlas_height = 0;
+    for (auto& rect : packing_rects)
+    {
+        min_atlas_width = std::max(rect.x + rect.w, min_atlas_width);
+        min_atlas_height = std::max(rect.y + rect.h, min_atlas_height);
+    }
+
+    glBindTexture(GL_TEXTURE_2D, texture_atlas_handle);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, min_atlas_width, min_atlas_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    rect_index = 0;
+    for (Texture& texture : atlas_textures)
+    {
+        glTexSubImage2D(GL_TEXTURE_2D, 0, packing_rects[rect_index].x, packing_rects[rect_index].y, texture.width, texture.height, GL_RGBA, GL_UNSIGNED_BYTE, texture.bitmap.data());
+
+        // Set UV coordinates for textures
+        texture.uv_start = Vec2(packing_rects[rect_index].x / (double)min_atlas_width, packing_rects[rect_index].y / (double)min_atlas_height);
+        texture.uv_end = Vec2((packing_rects[rect_index].x + texture.width) / (double)min_atlas_width, (packing_rects[rect_index].y + texture.height) / (double)min_atlas_height);
+
+        ++rect_index;
+    }
+}
+void glfwErrorCallback(int error, const char* description)
+{
+    fprintf(stderr, "quickdraw::window GLFW Error %d: %s\n", error, description);
+}
+void WindowSizeCallback(GLFWwindow* window_ptr, int width, int height)
 {
     viewport_dim = Vec2(width, height);
     glViewport(0, 0, width, height);
 
-    shader::Activate();
+    glUseProgram(SHADER_HANDLE);
     Vec2 transform = Vec2(1.0f / (viewport_dim - 1.0f));
     glUniform2fv(TRANSFORM_LOC, 1, &transform[0]);
 
     QUICKDRAW_NOTIFY_OBSERVERS(WindowResizeObserver, window_resize_observers, on_window_resize);
 }
-bool Init(const char* name, unsigned int width, unsigned int height)
+}
+bool Init(const std::string& name, const Vec2& size)
 {
-    if (width == 0 || height == 0)
+    if ((int)size.x <= 0 || (int)size.y <= 0)
+    {
+        std::cout << "quickdraw::Init Failed to initialize because width or height was less than 1\n";
         return false;
+    }
 
-    viewport_dim = Vec2(width, height);
+    viewport_dim = size;
 
     // Setup window
     glfwSetErrorCallback(glfwErrorCallback);
@@ -921,7 +632,7 @@ bool Init(const char* name, unsigned int width, unsigned int height)
     glfwWindowHint(GLFW_SAMPLES, 16);
     glfwWindowHint(GLFW_DECORATED, true);
 
-    glfw_window_handle = glfwCreateWindow((int)viewport_dim.x, (int)viewport_dim.y, name, NULL, NULL);
+    glfw_window_handle = glfwCreateWindow((int)viewport_dim.x, (int)viewport_dim.y, name.c_str(), NULL, NULL);
     if (glfw_window_handle == NULL)
     {
         std::cout << "quickdraw::window Failed to create GLFW window\n";
@@ -932,31 +643,48 @@ bool Init(const char* name, unsigned int width, unsigned int height)
     mouse::Init();
     keyboard::Init();
 
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
-    {
-        std::cout << "quickdraw::window::Init Failed to load OpenGL\n";
-        return false;
-    }
+    InitOpenGL();
 
     glGenTextures(1, &texture_atlas_handle);
-
     curr_font_atlas = new FontAtlas(64, "C:\\Windows\\Fonts\\segoeuil.ttf");
     if (!curr_font_atlas->ready_to_use())
     {
         return false;
     }
-    
-    // Initializes vertices and shaders
-    if (!shader::Init(std::filesystem::current_path() / "resources" / "quad.vert", std::filesystem::current_path() / "resources" / "quad.frag"))
-        return false;
 
     WindowSizeCallback(glfw_window_handle, (int)viewport_dim.x, (int)viewport_dim.y);
     last_time = glfwGetTime();
 
     return true;
 }
+std::pair<Texture*, Vec2> LoadTexture(std::filesystem::path file)
+{
+    int width, height;
+    auto file_str = file.string();
+    GLubyte* stbi_pixel_buffer = stbi_load(file_str.c_str(), &width, &height, nullptr, NUM_PIXEL_CHANNELS);
+    if (stbi_pixel_buffer == NULL)
+    {
+        return std::pair(nullptr, Vec2(0));
+    }
+    std::vector<GLubyte> my_pixel_buffer((size_t)width * height * NUM_PIXEL_CHANNELS);
+    for (int k = 0; k < my_pixel_buffer.size(); k++)
+    {
+        my_pixel_buffer[k] = stbi_pixel_buffer[k];
+    }
+    stbi_image_free(stbi_pixel_buffer);
+    return LoadTexture(width, height, my_pixel_buffer);
+}
+void UnloadTexture(Texture* texture_to_remove)
+{
+    atlas_textures.remove_if([&](const Texture& texture)->bool { return &texture == texture_to_remove; });
+    atlas_updated = true;
+}
 GLFWwindow* GetGLFWWindowHandle()
 {
+    if (glfw_window_handle == nullptr)
+    {
+        std::cout << "quickdraw::GetGLFWWindowHandle Failed to return handle because quickdraw::Init() has not been called\n";
+    }
     return glfw_window_handle;
 }
 void NewFrame()
@@ -966,8 +694,13 @@ void NewFrame()
     last_time = glfwGetTime();
 
     glfwPollEvents();
+    mouse::ProcessEvents();
 
-    mouse::ProcessEvents(); 
+    if (atlas_updated)
+    {
+        PackTextures();
+        atlas_updated = false;
+    }
 }
 void DrawFrame()
 {
@@ -978,18 +711,14 @@ void DrawFrame()
     glDisable(GL_STENCIL_TEST);
     glDisable(GL_SCISSOR_TEST);
     glActiveTexture(GL_TEXTURE0);
-
     glBindTexture(GL_TEXTURE_2D, texture_atlas_handle);
+    glBindVertexArray(quad_vao);
+    glUseProgram(SHADER_HANDLE);
 
-    shader::Activate();
-
-    size_t num_verts_this_frame = vertex_dynamic_attribs_to_draw.size();
-    size_t num_quads_this_frame = num_verts_this_frame / VERTS_PER_QUAD;
-
-    bool more_vertex_memory_needed = num_quads_this_frame > max_number_of_quads;
+    const size_t num_verts_this_frame = vertex_dynamic_attribs_to_draw.size();
+    const size_t num_quads_this_frame = num_verts_this_frame / VERTS_PER_QUAD;
+    const bool more_vertex_memory_needed = num_quads_this_frame > max_number_of_quads;
     max_number_of_quads = std::max(num_quads_this_frame, max_number_of_quads);
-
-    glBindVertexArray(quad_vao);    
 
     // Update static vertex attributes
     if (more_vertex_memory_needed)
@@ -1040,8 +769,8 @@ void DrawFrame()
     vertex_dynamic_attribs_to_draw.clear();
 
     glfwSwapBuffers(glfw_window_handle);
-    glClearColor(0.5, 0.5, 0.5, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glClearColor(background_color.r, background_color.g, background_color.b, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
 }
 bool ShouldClose()
 {
@@ -1052,45 +781,33 @@ void Terminate()
     delete curr_font_atlas;
     glfwTerminate();
 }
-/*
-void SetWindowIcon(TextureHandle handle)
+void SetBackgroundColor(const RGBA& color)
 {
-    glBindTexture(GL_TEXTURE_2D, handle);
-    int width, height;
-    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width);
-    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height);
-    std::vector<unsigned char> window_icon_data(size_t(width * height * 4));
-    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, window_icon_data.data());
-    GLFWimage window_icon{width, height, window_icon_data.data()};
-
-    glfwSetWindowIcon(glfw_window_handle, 1, &window_icon);
-}*/
+    background_color = color;
+}
+void SetWindowIcon(std::filesystem::path file)
+{
+    std::string file_str = file.generic_string();
+    GLFWimage image = {};
+    image.pixels = stbi_load(file_str.c_str(), &image.width, &image.height, nullptr, 4);
+    glfwSetWindowIcon(glfw_window_handle, 1, &image);
+    stbi_image_free(image.pixels);
+}
 void DrawRect(const Vec2& pos, const Vec2& size)
 {
-    using namespace shader;
-
     SetQuadMode(RECT_MODE);
-    SetRectPos(pos);
-    SetRectSize(size);
-
-    // SetQuadMode sets up UV's for RECT_MODE
-    curr_vertex_attribs[TOP_LEFT].pos     = pos + size * curr_vertex_attribs[TOP_LEFT].uv;
-    curr_vertex_attribs[TOP_RIGHT].pos    = pos + size * curr_vertex_attribs[TOP_RIGHT].uv;
-    curr_vertex_attribs[BOTTOM_RIGHT].pos = pos + size * curr_vertex_attribs[BOTTOM_RIGHT].uv;
-    curr_vertex_attribs[BOTTOM_LEFT].pos  = pos + size * curr_vertex_attribs[BOTTOM_LEFT].uv;
-
+    SetRectPosAndSize(pos, size);
     DrawQuad();
 }
 void DrawText(const Vec2& pos, const std::string &text)
 {
-    using namespace shader;
-    SetQuadMode(TEXT_MODE);
-
-    // TEXT_MODE uses UVs to sample the font atlas
-    // so we need to set them manually for each glyph
-
+    DynamicVertexAttribs saved_vertex_attribs[4];
+    for (int k = 0; k < 4; k++)
+    {
+        saved_vertex_attribs[k] = curr_vertex_attribs[k];
+    }
+    float text_width = GetTextWidth(text);
     float curs = 0;
-
     for (char c : text)
     {
         if (!FontAtlas::IsDisplayableChar(c))
@@ -1101,40 +818,52 @@ void DrawText(const Vec2& pos, const std::string &text)
                 continue;
             }
 
-            std::cout << "quickdraw::window::DrawText Failed to draw text because 'text' argument has a non-displayable character\n";
+            std::cout << "quickdraw::DrawText Failed to draw text because 'text' argument has a non-displayable character\n";
             return;
         }
         Glyph& glyph = *curr_font_atlas->get(c);
         float offset = (curr_font_atlas->font_height() - glyph.bearing.y - curr_font_atlas->font_offset()) * curr_text_scale;
 
-        Vec2 quad_top_left(pos.x + glyph.bearing.x * curr_text_scale + curs, pos.y + offset);
-        Vec2 quad_bottom_right = quad_top_left + Vec2(glyph.size) * curr_text_scale;
-        
-        curr_vertex_attribs[TOP_LEFT].pos = quad_top_left;
-        curr_vertex_attribs[TOP_RIGHT].pos = Vec2(quad_bottom_right.x, quad_top_left.y);
-        curr_vertex_attribs[BOTTOM_RIGHT].pos = quad_bottom_right;
-        curr_vertex_attribs[BOTTOM_LEFT].pos = Vec2(quad_top_left.x, quad_bottom_right.y);
-
-        curr_vertex_attribs[TOP_LEFT].uv = glyph.uv_start;
-        curr_vertex_attribs[TOP_RIGHT].uv = Vec2(glyph.uv_end.x, glyph.uv_start.y);
-        curr_vertex_attribs[BOTTOM_RIGHT].uv = glyph.uv_end;
-        curr_vertex_attribs[BOTTOM_LEFT].uv = Vec2(glyph.uv_start.x, glyph.uv_end.y);
-
-        DrawQuad();
+        Vec2 draw_pos = Vec2(pos.x + glyph.bearing.x * curr_text_scale + curs, pos.y + offset);    
+        Vec2 draw_size = glyph.size * curr_text_scale;
+        curr_vertex_attribs[UPPER_START].fill_color = glm::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, (draw_pos.x - pos.x) / text_width);
+        curr_vertex_attribs[UPPER_END].fill_color = glm::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, (draw_pos.x + draw_size.x - pos.x) / text_width);
+        curr_vertex_attribs[LOWER_START].fill_color = glm::mix(saved_vertex_attribs[LOWER_START].fill_color, saved_vertex_attribs[LOWER_END].fill_color, (draw_pos.x - pos.x) / text_width);
+        curr_vertex_attribs[LOWER_END].fill_color = glm::mix(saved_vertex_attribs[LOWER_START].fill_color, saved_vertex_attribs[LOWER_END].fill_color, (draw_pos.x + draw_size.x - pos.x) / text_width);
+        DrawTexture(glyph.texture, draw_pos, draw_size);
 
         // Advance the horizontal cursor to the drawing position of the next
         // character
         curs += glyph.advance * curr_text_scale;
     }
+
+    for (int k = 0; k < 4; k++)
+    {
+        curr_vertex_attribs[k] = saved_vertex_attribs[k];
+    }
+}
+void DrawTexture(Texture* texture, const Vec2& pos, const Vec2& size)
+{
+    SetQuadMode(TEXTURE_MODE);
+   
+    curr_vertex_attribs[UPPER_START].pos = pos;
+    curr_vertex_attribs[UPPER_END].pos = Vec2(pos.x + size.x, pos.y);
+    curr_vertex_attribs[LOWER_END].pos = pos + size;
+    curr_vertex_attribs[LOWER_START].pos = Vec2(pos.x, pos.y + size.y);
+
+    curr_vertex_attribs[UPPER_START].uv = texture->uv_start;
+    curr_vertex_attribs[UPPER_END].uv = Vec2(texture->uv_end.x, texture->uv_start.y);
+    curr_vertex_attribs[LOWER_END].uv = texture->uv_end;
+    curr_vertex_attribs[LOWER_START].uv = Vec2(texture->uv_start.x, texture->uv_end.y);
+
+    DrawQuad();
 }
 void DrawPath(const std::vector<Vec2> &points, float thickness, const Vec2& offset)
 {
     /*
     * The use of VertexIndex breaks down here. For example, if points[n].x > points[n+1].x,
-    * then the TOP_RIGHT vertex is actually to the left of the TOP_LEFT vertex
+    * then the UPPER_END vertex is actually to the left of the UPPER_START vertex
     */
-
-    using namespace shader;
 
     if (points.size() < 2)
     {
@@ -1193,21 +922,21 @@ void DrawPath(const std::vector<Vec2> &points, float thickness, const Vec2& offs
     Vec2 end_edge_slope = -(line_normal + next_normal) * end_edge_slope_coeff;
 
     // Set edge data
-    curr_vertex_attribs[TOP_LEFT].pos               = start_edge_slope + points[0] + offset;
-    curr_vertex_attribs[TOP_LEFT].fill_color        = glm::mix(saved_vertex_attribs[TOP_LEFT].fill_color,    saved_vertex_attribs[TOP_RIGHT].fill_color,    length_at_point[0] / path_length);
-    curr_vertex_attribs[TOP_LEFT].outline_color     = glm::mix(saved_vertex_attribs[TOP_LEFT].outline_color, saved_vertex_attribs[TOP_RIGHT].outline_color, length_at_point[0] / path_length);
+    curr_vertex_attribs[UPPER_START].pos               = start_edge_slope + points[0] + offset;
+    curr_vertex_attribs[UPPER_START].fill_color        = glm::mix(saved_vertex_attribs[UPPER_START].fill_color,    saved_vertex_attribs[UPPER_END].fill_color,    length_at_point[0] / path_length);
+    curr_vertex_attribs[UPPER_START].outline_color     = glm::mix(saved_vertex_attribs[UPPER_START].outline_color, saved_vertex_attribs[UPPER_END].outline_color, length_at_point[0] / path_length);
 
-    curr_vertex_attribs[TOP_RIGHT].pos              = end_edge_slope + points[1] + offset;
-    curr_vertex_attribs[TOP_RIGHT].fill_color       = glm::mix(saved_vertex_attribs[TOP_LEFT].fill_color,    saved_vertex_attribs[TOP_RIGHT].fill_color,    length_at_point[1] / path_length);
-    curr_vertex_attribs[TOP_RIGHT].outline_color    = glm::mix(saved_vertex_attribs[TOP_LEFT].outline_color, saved_vertex_attribs[TOP_RIGHT].outline_color, length_at_point[1] / path_length);
+    curr_vertex_attribs[UPPER_END].pos              = end_edge_slope + points[1] + offset;
+    curr_vertex_attribs[UPPER_END].fill_color       = glm::mix(saved_vertex_attribs[UPPER_START].fill_color,    saved_vertex_attribs[UPPER_END].fill_color,    length_at_point[1] / path_length);
+    curr_vertex_attribs[UPPER_END].outline_color    = glm::mix(saved_vertex_attribs[UPPER_START].outline_color, saved_vertex_attribs[UPPER_END].outline_color, length_at_point[1] / path_length);
 
-    curr_vertex_attribs[BOTTOM_RIGHT].pos           = -end_edge_slope + points[1] + offset;
-    curr_vertex_attribs[BOTTOM_RIGHT].fill_color    = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].fill_color,    saved_vertex_attribs[BOTTOM_RIGHT].fill_color,    length_at_point[1] / path_length);
-    curr_vertex_attribs[BOTTOM_RIGHT].outline_color = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].outline_color, saved_vertex_attribs[BOTTOM_RIGHT].outline_color, length_at_point[1] / path_length);
+    curr_vertex_attribs[LOWER_END].pos           = -end_edge_slope + points[1] + offset;
+    curr_vertex_attribs[LOWER_END].fill_color    = glm::mix(saved_vertex_attribs[LOWER_START].fill_color,    saved_vertex_attribs[LOWER_END].fill_color,    length_at_point[1] / path_length);
+    curr_vertex_attribs[LOWER_END].outline_color = glm::mix(saved_vertex_attribs[LOWER_START].outline_color, saved_vertex_attribs[LOWER_END].outline_color, length_at_point[1] / path_length);
 
-    curr_vertex_attribs[BOTTOM_LEFT].pos            = -start_edge_slope + points[0] + offset;
-    curr_vertex_attribs[BOTTOM_LEFT].fill_color     = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].fill_color,    saved_vertex_attribs[BOTTOM_RIGHT].fill_color,    length_at_point[0] / path_length);
-    curr_vertex_attribs[BOTTOM_LEFT].outline_color  = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].outline_color, saved_vertex_attribs[BOTTOM_RIGHT].outline_color, length_at_point[0] / path_length);
+    curr_vertex_attribs[LOWER_START].pos            = -start_edge_slope + points[0] + offset;
+    curr_vertex_attribs[LOWER_START].fill_color     = glm::mix(saved_vertex_attribs[LOWER_START].fill_color,    saved_vertex_attribs[LOWER_END].fill_color,    length_at_point[0] / path_length);
+    curr_vertex_attribs[LOWER_START].outline_color  = glm::mix(saved_vertex_attribs[LOWER_START].outline_color, saved_vertex_attribs[LOWER_END].outline_color, length_at_point[0] / path_length);
 
     // draw the quad
     DrawQuad();
@@ -1219,8 +948,8 @@ void DrawPath(const std::vector<Vec2> &points, float thickness, const Vec2& offs
         while (k < points.size() - 2)
         {
             // We get the start edge data from the previous end edge
-            curr_vertex_attribs[TOP_LEFT]    = curr_vertex_attribs[TOP_RIGHT];
-            curr_vertex_attribs[BOTTOM_LEFT] = curr_vertex_attribs[BOTTOM_RIGHT];
+            curr_vertex_attribs[UPPER_START]    = curr_vertex_attribs[UPPER_END];
+            curr_vertex_attribs[LOWER_START] = curr_vertex_attribs[LOWER_END];
 
             // Use the next normal from the last line as the normal for the current
             // line
@@ -1233,13 +962,13 @@ void DrawPath(const std::vector<Vec2> &points, float thickness, const Vec2& offs
             end_edge_slope = -(line_normal + next_normal) * end_edge_slope_coeff;
 
             // Set the end edge data
-            curr_vertex_attribs[TOP_RIGHT].pos              = end_edge_slope + points[k + 1] + offset;
-            curr_vertex_attribs[TOP_RIGHT].fill_color       = glm::mix(saved_vertex_attribs[TOP_LEFT].fill_color,    saved_vertex_attribs[TOP_RIGHT].fill_color,    length_at_point[k + 1] / path_length);
-            curr_vertex_attribs[TOP_RIGHT].outline_color    = glm::mix(saved_vertex_attribs[TOP_LEFT].outline_color, saved_vertex_attribs[TOP_RIGHT].outline_color, length_at_point[k + 1] / path_length);
+            curr_vertex_attribs[UPPER_END].pos              = end_edge_slope + points[k + 1] + offset;
+            curr_vertex_attribs[UPPER_END].fill_color       = glm::mix(saved_vertex_attribs[UPPER_START].fill_color,    saved_vertex_attribs[UPPER_END].fill_color,    length_at_point[k + 1] / path_length);
+            curr_vertex_attribs[UPPER_END].outline_color    = glm::mix(saved_vertex_attribs[UPPER_START].outline_color, saved_vertex_attribs[UPPER_END].outline_color, length_at_point[k + 1] / path_length);
 
-            curr_vertex_attribs[BOTTOM_RIGHT].pos           = -end_edge_slope + points[k + 1] + offset;
-            curr_vertex_attribs[BOTTOM_RIGHT].fill_color    = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].fill_color,    saved_vertex_attribs[BOTTOM_RIGHT].fill_color,    length_at_point[k + 1] / path_length);
-            curr_vertex_attribs[BOTTOM_RIGHT].outline_color = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].outline_color, saved_vertex_attribs[BOTTOM_RIGHT].outline_color, length_at_point[k + 1] / path_length);
+            curr_vertex_attribs[LOWER_END].pos           = -end_edge_slope + points[k + 1] + offset;
+            curr_vertex_attribs[LOWER_END].fill_color    = glm::mix(saved_vertex_attribs[LOWER_START].fill_color,    saved_vertex_attribs[LOWER_END].fill_color,    length_at_point[k + 1] / path_length);
+            curr_vertex_attribs[LOWER_END].outline_color = glm::mix(saved_vertex_attribs[LOWER_START].outline_color, saved_vertex_attribs[LOWER_END].outline_color, length_at_point[k + 1] / path_length);
             
             DrawQuad();
             k++;
@@ -1247,14 +976,14 @@ void DrawPath(const std::vector<Vec2> &points, float thickness, const Vec2& offs
 
         // draw the last line
         end_edge_slope = -next_normal * thickness;
-        curr_vertex_attribs[TOP_LEFT]                   = curr_vertex_attribs[TOP_RIGHT];
-        curr_vertex_attribs[BOTTOM_LEFT]                = curr_vertex_attribs[BOTTOM_RIGHT];
-        curr_vertex_attribs[TOP_RIGHT].pos              = end_edge_slope  + points[k + 1] + offset;
-        curr_vertex_attribs[TOP_RIGHT].fill_color       = glm::mix(saved_vertex_attribs[TOP_LEFT].fill_color,    saved_vertex_attribs[TOP_RIGHT].fill_color,    length_at_point[k + 1] / path_length);
-        curr_vertex_attribs[TOP_RIGHT].outline_color    = glm::mix(saved_vertex_attribs[TOP_LEFT].outline_color, saved_vertex_attribs[TOP_RIGHT].outline_color, length_at_point[k + 1] / path_length);
-        curr_vertex_attribs[BOTTOM_RIGHT].pos           = -end_edge_slope + points[k + 1] + offset;
-        curr_vertex_attribs[BOTTOM_RIGHT].fill_color    = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].fill_color,    saved_vertex_attribs[BOTTOM_RIGHT].fill_color,    length_at_point[k + 1] / path_length);
-        curr_vertex_attribs[BOTTOM_RIGHT].outline_color = glm::mix(saved_vertex_attribs[BOTTOM_LEFT].outline_color, saved_vertex_attribs[BOTTOM_RIGHT].outline_color, length_at_point[k + 1] / path_length);
+        curr_vertex_attribs[UPPER_START]                   = curr_vertex_attribs[UPPER_END];
+        curr_vertex_attribs[LOWER_START]                = curr_vertex_attribs[LOWER_END];
+        curr_vertex_attribs[UPPER_END].pos              = end_edge_slope  + points[k + 1] + offset;
+        curr_vertex_attribs[UPPER_END].fill_color       = glm::mix(saved_vertex_attribs[UPPER_START].fill_color,    saved_vertex_attribs[UPPER_END].fill_color,    length_at_point[k + 1] / path_length);
+        curr_vertex_attribs[UPPER_END].outline_color    = glm::mix(saved_vertex_attribs[UPPER_START].outline_color, saved_vertex_attribs[UPPER_END].outline_color, length_at_point[k + 1] / path_length);
+        curr_vertex_attribs[LOWER_END].pos           = -end_edge_slope + points[k + 1] + offset;
+        curr_vertex_attribs[LOWER_END].fill_color    = glm::mix(saved_vertex_attribs[LOWER_START].fill_color,    saved_vertex_attribs[LOWER_END].fill_color,    length_at_point[k + 1] / path_length);
+        curr_vertex_attribs[LOWER_END].outline_color = glm::mix(saved_vertex_attribs[LOWER_START].outline_color, saved_vertex_attribs[LOWER_END].outline_color, length_at_point[k + 1] / path_length);
 
         DrawQuad();
     }
@@ -1263,25 +992,61 @@ void DrawPath(const std::vector<Vec2> &points, float thickness, const Vec2& offs
         curr_vertex_attribs[k] = saved_vertex_attribs[k];
     }
 }
-/*
-void DrawTexture(TextureHandle handle, const Vec2& pos, const Vec2& size)
+void SetFillColor(const RGBA& color, ShapeLoc loc)
 {
-    using namespace shader;
-    if (handle == 0)
-        return;
-    curr_quad_attribs.mode = TEXTURE_MODE;
-    glBindTexture(GL_TEXTURE_2D, handle);
-
-    Vec2 vertices[4] = { pos + size * Vec2(0,0), pos + size * Vec2(1,0), pos + size * Vec2(1,1), pos + size * Vec2(0,1) };
-    DrawQuad(vertices);
+    curr_vertex_attribs[loc].fill_color = color;
 }
-*/
-void StartScissor(const Vec2& pos, const Vec2& size)
+void SetFillColor(const RGBA& color)
+{
+    SetFillColor(color, UPPER_START);
+    SetFillColor(color, UPPER_END);
+    SetFillColor(color, LOWER_END);
+    SetFillColor(color, LOWER_START);
+}
+void SetOutlineColor(const RGBA& color, ShapeLoc loc)
+{
+    curr_vertex_attribs[loc].outline_color = color;
+}
+void SetOutlineColor(const RGBA& color)
+{
+    SetOutlineColor(color, UPPER_START);
+    SetOutlineColor(color, UPPER_END);
+    SetOutlineColor(color, LOWER_END);
+    SetOutlineColor(color, LOWER_START);
+}
+void SetRectRoundedMask(bool mask, ShapeLoc loc)
+{
+    curr_vertex_attribs[loc].corner_mask = mask;
+}
+void SetRectRoundedMask(bool mask)
+{
+    SetRectRoundedMask(mask, UPPER_START);
+    SetRectRoundedMask(mask, UPPER_END);
+    SetRectRoundedMask(mask, LOWER_END);
+    SetRectRoundedMask(mask, LOWER_START);
+}
+void SetOutlineThickness(float thickness)
+{
+    curr_quad_attribs[5] = thickness;
+}
+void SetRectCornerSize(float size)
+{
+    curr_quad_attribs[6] = size;
+}
+Vec2 TextSize(const std::string& str)
+{
+    return Vec2(GetTextWidth(str), GetTextHeight());
+}
+void SetTextScale(float s)
+{
+    curr_text_scale = s;
+}
+void EnableScissor(const Vec2& pos, const Vec2& size)
 {
     glEnable(GL_SCISSOR_TEST);
-    glScissor(pos.x, viewport_dim.y - pos.y - size.y, size.x, size.y);
+    glScissor((GLint)pos.x, (GLint)(viewport_dim.y - pos.y - size.y), (GLint)size.x, (GLint)size.y);
 }
-void StopScissor()
+void DisableScissor()
 {
     glDisable(GL_SCISSOR_TEST);
 }
@@ -1301,6 +1066,14 @@ int FrameNumber()
 {
     return frame_number;
 }
+void AbstractObserver::set_enabled(bool flag)
+{
+    enabled_ = flag;
+}
+bool AbstractObserver::enabled()
+{
+    return enabled_;
+}
 bool AddWindowTerminationObserver(WindowTerminationObserver* ob)
 {
     return window_termination_observers.insert(ob).second;
@@ -1317,8 +1090,223 @@ bool RemoveWindowResizeObserver(WindowResizeObserver* ob)
 {
     return window_resize_observers.erase(ob);
 }
-} // namespace window
 
+namespace mouse
+{
+    namespace
+    {
+        void ButtonCallback(GLFWwindow* window_ptr, int button, int action, int mods)
+        {
+            button_states[button].new_state(action);
+            key_mods = mods;
+
+            if (IsPressed(Button(button)))
+            {
+                QUICKDRAW_NOTIFY_OBSERVERS(Observer, observers, on_mouse_press);
+
+            }
+            else if (IsReleased(Button(button)))
+            {
+                QUICKDRAW_NOTIFY_OBSERVERS(Observer, observers, on_mouse_release);
+            }
+
+            mouse_button_update_received = true;
+        }
+        void CursorCallback(GLFWwindow* window_ptr, double x, double y)
+        {
+            double mx, my;
+            glfwGetCursorPos(window_ptr, &mx, &my);
+            pos_state.new_state(Vec2(mx, my));
+            delta_state = pos_state.current - pos_state.previous;
+            QUICKDRAW_NOTIFY_OBSERVERS(Observer, observers, on_mouse_move);
+            cursor_update_received = true;
+        }
+        void ScrollCallback(GLFWwindow* window_ptr, double xoffset, double yoffset)
+        {
+            scroll_update_received = true;
+            scroll_state.new_state((int)yoffset);
+            QUICKDRAW_NOTIFY_OBSERVERS(Observer, observers, on_mouse_scroll);
+        }
+        void ProcessEvents()
+        {
+            // Make sure to set scroll state to 0 if we aren't scrolling
+            if (!scroll_update_received && scroll_state.current != 0)
+            {
+                ScrollCallback(glfw_window_handle, 0, 0);
+            }
+
+            // Make sure to set delta to 0 if mouse hasn't moved.
+            if (!cursor_update_received && delta_state != Vec2(0))
+            {
+                delta_state = Vec2(0);
+            }
+
+            if (!mouse_button_update_received)
+            {
+                for (auto& bs : button_states)
+                {
+                    if (bs.current != bs.previous)
+                        bs.new_state(bs.current);
+                }
+            }
+            scroll_update_received = false;
+            cursor_update_received = false;
+            mouse_button_update_received = false;
+        }
+        void Init()
+        {
+            for (auto& st : button_states)
+            {
+                st.current = st.previous = UP;
+            }
+
+            for (int k = ARROW; k <= VRESIZE; k++)
+            {
+                cursor_ptrs[k - ARROW] = glfwCreateStandardCursor(k);
+
+                if (cursor_ptrs[k - ARROW] == NULL)
+                    std::cout << "Error creating cursor " << k << "\n";
+            }
+
+            if (glfwRawMouseMotionSupported())
+                glfwSetInputMode(glfw_window_handle, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+            glfwSetScrollCallback(glfw_window_handle, ScrollCallback);
+            glfwSetCursorPosCallback(glfw_window_handle, CursorCallback);
+            glfwSetMouseButtonCallback(glfw_window_handle, ButtonCallback);
+        }
+    }
+
+    bool IsDown()
+    {
+        for (auto& s : button_states)
+        {
+            if (s.current == DOWN)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    bool IsDown(int button)
+    {
+        return button_states[button].current == DOWN;
+    }
+    bool IsPressed()
+    {
+        for (auto& s : button_states)
+        {
+            if (s.current == DOWN && s.previous == UP)
+                return true;
+        }
+        return false;
+    }
+    bool IsReleased()
+    {
+        for (auto& s : button_states)
+        {
+            if (s.current == UP && s.previous == DOWN)
+                return true;
+        }
+        return false;
+    }
+    bool IsDown(Button b)
+    {
+        return button_states[b].current == DOWN;
+    }
+    bool IsPressed(Button b)
+    {
+        return button_states[b].current == DOWN && button_states[b].previous == UP;
+    }
+    bool IsReleased(Button b)
+    {
+        return button_states[b].current == UP && button_states[b].previous == DOWN;
+    }
+    bool IsMoving()
+    {
+        return delta_state != Vec2(0);
+    }
+    Vec2 Delta()
+    {
+        return delta_state;
+    }
+    Vec2 Pos()
+    {
+        return pos_state.current;
+    }
+    int ScrollDir()
+    {
+        return scroll_state.current;
+    }
+    bool AddObserver(Observer* ob)
+    {
+        return observers.insert(ob).second;
+    }
+    bool RemoveObserver(Observer* ob)
+    {
+        return observers.erase(ob);
+    }
+    void SetCursor(Cursor cursor)
+    {
+        glfwSetCursor(glfw_window_handle, cursor_ptrs[cursor - ARROW]);
+    }
+    void SetCursorEnabled(bool flag)
+    {
+        glfwSetInputMode(glfw_window_handle, GLFW_CURSOR, flag ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_HIDDEN);
+    }
+} // namespace mouse
+namespace keyboard
+{
+    namespace
+    {
+        void KeyCallback(GLFWwindow* window_ptr, int key, int scancode, int action, int mods)
+        {
+            // We don't care about modifier keys. We'll leave that to the mods parameter.
+            if (key >= KEY_LEFT_SHIFT && key <= KEY_RIGHT_SUPER)
+                return;
+
+            key_mods = mods;
+            std::set<int> new_keys = down_keys.current;
+
+            if (action == GLFW_PRESS)
+            {
+                new_keys.insert(key);
+            }
+
+            else if (action == GLFW_RELEASE)
+            {
+                new_keys.erase(key);
+            }
+            down_keys.new_state(new_keys);
+
+            if (down_keys.current.size() > down_keys.previous.size())
+            {
+                QUICKDRAW_NOTIFY_OBSERVERS(Observer, observers, on_keyboard_press);
+
+            }
+        }
+        void Init()
+        {
+            glfwSetKeyCallback(glfw_window_handle, KeyCallback);
+        }
+    }
+    const std::set<int>& DownKeys()
+    {
+        return down_keys.current;
+    }
+    bool AddObserver(Observer* ob)
+    {
+        return observers.insert(ob).second;
+    }
+    bool RemoveObserver(Observer* ob)
+    {
+        return observers.erase(ob);
+    }
+    int KeyModifiers()
+    {
+        return key_mods;
+    }
+}
 }
 
 

@@ -5,16 +5,10 @@ layout(location = 0) in vec2 pos;
 layout(location = 1) in float corner_mask;
 layout(location = 2) in vec4 fill_color;
 layout(location = 3) in vec4 outline_color;
+layout(location = 4) in vec2 uv;
 
 // Static attributes
-layout(location = 4) in vec2 uv;
 layout(location = 5) in unsigned int quad_index;
-
-// Per quad attributes
-layout(std430, binding = 0) buffer Quads
-{
-	float quad_array[];
-};
 
 uniform vec2 transform;
 

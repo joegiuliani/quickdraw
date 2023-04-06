@@ -6,7 +6,7 @@ layout(std430, binding = 0) buffer Quads
 	float quad_array[];
 };
 
-uniform sampler2D font_atlas;
+uniform sampler2D texture_atlas;
 
 in vec2 frag_pos;
 in float frag_corner_mask;
@@ -18,9 +18,8 @@ flat in unsigned int frag_quad_index;
 out vec4 color_out;
 
 #define MODE_RECT 0
-// #define MODE_IMAGE 1
-#define MODE_FONT 2
-#define MODE_PATH 3
+#define MODE_TEXTURE 1
+#define MODE_PATH 2
 
 bool in_bounds(float x, float mini, float maxi)
 {
@@ -60,14 +59,9 @@ void main()
 {
 	vec4 color = frag_fill_color;
 	
-	/*
-	if (mode == MODE_IMAGE)
+	if (quad_mode() == MODE_TEXTURE)
 	{
-		color *= texture(image, frag_uv);
-	}
-	else*/ if (quad_mode() == MODE_FONT)
-	{
-		color *= texture(font_atlas, frag_uv);
+		color *= texture(texture_atlas, frag_uv);
 	}
 	else  if (quad_mode() == MODE_PATH)
 	{

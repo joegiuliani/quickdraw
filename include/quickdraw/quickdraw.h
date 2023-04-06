@@ -144,9 +144,20 @@ constexpr int MOD_SUPER = GLFW_MOD_SUPER;
 constexpr int MOD_CAPS_LOCK = GLFW_MOD_CAPS_LOCK;
 constexpr int MOD_NUM_LOCK = GLFW_MOD_NUM_LOCK;
 
-using RGBA = glm::vec<4,float,glm::packed_highp>;
+constexpr int NUM_PIXEL_CHANNELS = 4;
+
+// - Channel type: float
+// - Range: [0,1]
+using RGBA = glm::vec<NUM_PIXEL_CHANNELS, float, glm::packed_highp>;
+// 2 float components x and y
 using Vec2 = glm::vec<2, float, glm::packed_highp>;
 
+enum Axis
+{
+    HORIZONTAL = 0,
+    VERTICAL = 1
+};
+struct Texture;
 class AbstractObserver
 {
 public:
@@ -155,101 +166,94 @@ public:
 private:
     bool enabled_ = true;
 };
-
-enum Axis
-{
-    HORIZONTAL = 0,
-    VERTICAL = 1
-};
-
-namespace window
-{
-
 class WindowTerminationObserver : public AbstractObserver
 {
 public:
     virtual void on_window_termination() = 0;
 };
-
-bool AddWindowTerminationObserver(WindowTerminationObserver* ob);
-bool RemoveWindowTerminationObserver(WindowTerminationObserver* ob);
-
 class WindowResizeObserver : public AbstractObserver
 {
 
 public:
     virtual void on_window_resize() = 0;
 };
-
-bool AddWindowResizeObserver(WindowResizeObserver* ob);
-bool RemoveWindowResizeObserver(WindowResizeObserver* ob);
-
-struct Texture
-{
-    int width;
-    int height;
-    std::vector<GLubyte> bitmap;
-};
-
 enum ButtonState
 {
     UP = GLFW_RELEASE,
     DOWN = GLFW_PRESS
 };
+enum ShapeLoc
+{
+    UPPER_START = 0,
+    UPPER_END = 1,
+    LOWER_END = 2,
+    LOWER_START = 3
+};
 
 // Returns a non-zero value if there was an issue during initialization.
-bool Init(const char* name, unsigned int width, unsigned int height);
+// width and height must be greater than 0
+bool Init(const std::string& name, const Vec2& size);
+
+bool AddWindowTerminationObserver(WindowTerminationObserver* ob);
+bool RemoveWindowTerminationObserver(WindowTerminationObserver* ob);
+bool AddWindowResizeObserver(WindowResizeObserver* ob);
+bool RemoveWindowResizeObserver(WindowResizeObserver* ob);
 
 // Returns nullptr before quickdraw::window::Init() is called
 GLFWwindow* GetGLFWWindowHandle();
-
-// - Returns a pointer to the texture and whether it was successfully loaded
-// - File type can be anything supported by stbimage
-const Texture* LoadTexture(std::filesystem::path file);
-void UnloadTexture(const Texture* texture);
-
-// TODO add scissor functionality for font shadows
-
 void SetWindowIcon(std::filesystem::path file);
-
-// Updates frame information and polls input events
-void NewFrame();
-void DrawFrame();
-bool ShouldClose();
-void Terminate();
-
-void DrawRect(const Vec2& pos, const Vec2& size);
-
-// Draws Text with a specified position
-void DrawText(const Vec2& pos, const std::string &Text);
-
-// - Works best with high resolution curves.
-// - points.size() cannot be less than 2
-void DrawPath(const std::vector<Vec2>& points, float thickness, const Vec2& offset = Vec2(0));
-
-/*
-void DrawTexture(TextureHandle handle, const Vec2& pos, const Vec2& size);
-*/
-void StartScissor(const Vec2& pos, const Vec2& size);
-
-// Disables the scissor test
-void StopScissor();
-
 // Returns the time in seconds
 double Time();
-
 // Returns the duration of time since the start of the last frame in seconds
 double DeltaTime();
-
 // - Returns the number of frames since the start of the program so that
 // 0 is returned during the first frame.
 //
 // - A negative number may be returned that the previous frame number is
 // always less than the current
 int FrameNumber();
-
 // Returns the size of the drawing context
 Vec2 ViewportSize();
+void SetBackgroundColor(const RGBA& color);
+// Updates frame information and polls input events
+void NewFrame();
+void DrawFrame();
+bool ShouldClose();
+void Terminate();
+void DrawRect(const Vec2& pos, const Vec2& size);
+void DrawText(const Vec2& pos, const std::string &Text);
+
+// - Works best with high resolution curves.
+// - points.size() cannot be less than 2
+void DrawPath(const std::vector<Vec2>& points, float thickness, const Vec2& offset = Vec2(0));
+
+// - When the image is drawn its pixels are multiplied by the current fill color.
+// - For example, if fill = RGBA(0,0,0,0) the image is invisible,
+//   if fill = RGBA(1,0,1,0.5) the image is half transparent and only the
+//   red and blue channels are visible.
+void DrawTexture(Texture* texture, const Vec2& pos, const Vec2& size);
+
+std::pair<Texture*, Vec2> LoadTexture(std::filesystem::path file);
+
+void EnableScissor(const Vec2& pos, const Vec2& size);
+// Disables the scissor test
+void DisableScissor();
+void SetFillColor(const RGBA& color, ShapeLoc loc);
+void SetFillColor(const RGBA& color);
+void SetOutlineColor(const RGBA& color, ShapeLoc loc);
+void SetOutlineColor(const RGBA& color);
+void SetRectRoundedMask(bool mask, ShapeLoc loc);
+void SetRectRoundedMask(bool mask);
+void SetRectCornerSize(float size);
+// Sets the thickness of the outline of the rectangle to be drawn
+void SetOutlineThickness(float thickness);
+// Sets the scale of Text. Make sure to set the desired Text scale before
+// calling TextSize(...)
+void SetTextScale(float s);
+
+// Returns the size of the bounding box of str if it were drawn on the screen.
+// Make sure to set the desired Text scale before calling this method.
+Vec2 TextSize(const std::string& str);
 
 namespace mouse
 {
@@ -263,9 +267,6 @@ public:
     virtual void on_mouse_scroll() = 0;
 };
 
-bool AddObserver(Observer* ob);
-bool RemoveObserver(Observer* ob);
-
 enum Cursor
 {
     ARROW = GLFW_ARROW_CURSOR,
@@ -275,12 +276,6 @@ enum Cursor
     HRESIZE = GLFW_HRESIZE_CURSOR,
     VRESIZE = GLFW_VRESIZE_CURSOR
 };
-
-void SetCursor(Cursor cursor);
-
-// Shows/hides the cursor when inside the window
-void SetCursorEnabled(bool flag);
-
 enum Button
 {
     LEFT = GLFW_MOUSE_BUTTON_LEFT,
@@ -288,66 +283,30 @@ enum Button
     MIDDLE = GLFW_MOUSE_BUTTON_MIDDLE
 };
 
+bool AddObserver(Observer* ob);
+bool RemoveObserver(Observer* ob);
+void SetCursor(Cursor cursor);
+// Shows/hides the cursor when inside the window
+void SetCursorEnabled(bool flag);
 // Returns whether any of the mouse buttons are down
 bool IsDown();
-
 // Returns whether any of the mouse buttons are pressed
 bool IsPressed();
-
 // Returns whether any of the mouse buttons are released
 bool IsReleased();
-
 bool IsDown(Button b);
-
 bool IsPressed(Button b);
-
 bool IsReleased(Button b);
-
 bool IsMoving();
-
 // Returns the difference between the current position and the
 // last polled position
 Vec2 Delta();
-
 // Returns the last polled distance from the top left of the viewport
 Vec2 Pos();
-
 // Returns -1, 0, or 1
 int ScrollDir();
 
-} // namespace mouse
-
-namespace shader
-{
-    enum VertexIndex
-    {
-        TOP_LEFT = 0,
-        TOP_RIGHT = 1,
-        BOTTOM_RIGHT = 2,
-        BOTTOM_LEFT = 3
-    };
-
-    void SetFillColor(const RGBA& color, VertexIndex index);
-    void SetFillColor(const RGBA& color);
-    void SetOutlineColor(const RGBA& color, VertexIndex index);
-    void SetOutlineColor(const RGBA& color);
-    void SetRectCornerMask(bool mask, VertexIndex index);
-    void SetRectCornerMask(bool mask);
-    void SetRectCornerSize(float size);
-
-    // Sets the thickness of the outline of the rectangle to be drawn
-    void SetOutlineThickness(float thickness);
-    
-    // Sets the scale of Text. Make sure to set the desired Text scale before
-    // calling TextSize(...)
-    void SetTextScale(float s);
-
-    // Returns the size of the bounding box of str if it were drawn on the screen.
-    // Make sure to set the desired Text scale before calling this method.
-    Vec2 TextSize(const std::string& str);
-    
-} // namespace shader
-
+} // namespace mouse   
 namespace keyboard
 {
 
@@ -365,7 +324,6 @@ int KeyModifiers();
 const std::set<int> &DownKeys();
 } // namespace keyboard
 
-} // namespace window
 } // namespace quickdraw
 
 // QUICKDRAW_QUICKDRAW_H_
