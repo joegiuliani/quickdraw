@@ -1,5 +1,4 @@
-#include "../include/quickdraw/quickdraw.h"
-#include <vector>
+/*#include "../include/quickdraw/quickdraw.h"
 using namespace quickdraw;
 int main()
 {
@@ -71,5 +70,24 @@ int main()
 	}
 	Terminate();
 
+	return 0;
+}
+*/
+
+#include "../include/quickdraw/quickdraw.h"
+using namespace quickdraw;
+int main()
+{
+	Init("Window Name", Vec2(640, 480));
+
+		while (!ShouldClose())
+		{
+			NewFrame();
+			SetFillColor(RGBA(1, 1, 1, 1));
+			DrawRect(Vec2(0, 0), Vec2(100, 100));
+			DrawFrame();
+		}
+
+	Terminate();
 	return 0;
 }

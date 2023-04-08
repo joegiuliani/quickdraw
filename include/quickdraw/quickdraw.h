@@ -12,6 +12,28 @@
 #include <filesystem>
 #include <memory>
 
+/*
+Example:
+
+#include "../include/quickdraw/quickdraw.h"
+using namespace quickdraw;
+int main()
+{
+    Init("Window Name", Vec2(640, 480));
+
+    while (!ShouldClose())
+    {
+        NewFrame();
+        SetFillColor(RGBA(1,1,1,1));
+        DrawRect(Vec2(0,0), Vec2(100,100));
+        DrawFrame();
+    }
+
+    Terminate();
+    return 0;
+}
+*/
+
 namespace quickdraw
 {
 struct Texture;
@@ -185,6 +207,7 @@ enum MouseButton
 // - Range: [0,1]
 using RGBA = glm::vec<NUM_PIXEL_CHANNELS, float, glm::packed_highp>;
 // - 2 float components x and y
+// - Vec2(0,0) is the top-left pixel of the window
 using Vec2 = glm::vec<2, float, glm::packed_highp>;
 struct MouseSnapshot
 {
