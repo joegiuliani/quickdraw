@@ -1,11 +1,5 @@
 # quickdraw
-Abstracted OpenGL/GLFW 2D drawing library for quick setup.
+Simple, highly customizable 2D graphics library. Draw rounded rects and paths with outlines and gradients. Load images and fonts from files on demand. Quickly add and remove Window, Keyboard, Mouse, and Character Typing observers.
 
-# Platforms
-Windows 10
-
-# Description
-The goal of this project is to provide a quick drawing API as a basis for other projects which require a GUI.
-
-# Features
-Rounded corners, scaleable text, scaleable image textures, curves, outlines, gradients, window/mouse/keyboard observers
+# Specs
+Developed for Windows 10 with C++17 and OpenGL 4.5. Only supports file formats compatible with stb_image and FreeType.
