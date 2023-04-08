@@ -15,26 +15,12 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <None Include="resources\quad.vert">
-      <Filter>Resource Files</Filter>
-    </None>
-    <None Include="resources\quad.frag">
-      <Filter>Resource Files</Filter>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="src\glad.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="src\quickdraw.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="demo.cpp">
+    <ClCompile Include="src\demo.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="include\quickdraw\quickdraw.h">
+    <ClInclude Include="include\quickdraw.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

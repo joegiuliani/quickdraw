@@ -1,21 +1,318 @@
-#include "../include/quickdraw/quickdraw.h"
+#pragma once
 #define STB_IMAGE_IMPLEMENTATION
-#include "../include/stb_image.h"
+#include "stb_image.h"
 #define STB_RECT_PACK_IMPLEMENTATION
-#include "../include/stb_rect_pack.h"
-#include "../include/ft2build.h"
-#include FT_FREETYPE_H
-#include "../include/glm/geometric.hpp"
+#include "stb_rect_pack.h"
+#include "freetype\config/ftheader.h"
+#include "freetype\freetype.h"
+#include "glad\glad.h"
+#include "GLFW\glfw3native.h"
+#include "GLFW\glfw3.h"
+#include "glm\glm.hpp"
+#include "glm\geometric.hpp"
+#include "glm\vec2.hpp"
+#include "glm\vec4.hpp"
 #include <fstream>
 #include <iostream>
 #include <sstream>
-
+#include <set>
+#include <string>
+#include <vector>
+#include <filesystem>
+#include <memory>
 // FORWARD DECLARATIONS
 namespace quickdraw
 {
-struct Texture;
-class Font;
-namespace
+constexpr int KEY_UNKNOWN = GLFW_KEY_UNKNOWN;
+constexpr int KEY_SPACE = GLFW_KEY_SPACE;
+constexpr int KEY_APOSTROPHE = GLFW_KEY_APOSTROPHE;
+constexpr int KEY_COMMA = GLFW_KEY_COMMA;
+constexpr int KEY_MINUS = GLFW_KEY_MINUS;
+constexpr int KEY_PERIOD = GLFW_KEY_PERIOD;
+constexpr int KEY_SLASH = GLFW_KEY_SLASH;
+constexpr int KEY_0 = GLFW_KEY_0;
+constexpr int KEY_1 = GLFW_KEY_1;
+constexpr int KEY_2 = GLFW_KEY_2;
+constexpr int KEY_3 = GLFW_KEY_3;
+constexpr int KEY_4 = GLFW_KEY_4;
+constexpr int KEY_5 = GLFW_KEY_5;
+constexpr int KEY_6 = GLFW_KEY_6;
+constexpr int KEY_7 = GLFW_KEY_7;
+constexpr int KEY_8 = GLFW_KEY_8;
+constexpr int KEY_9 = GLFW_KEY_9;
+constexpr int KEY_SEMICOLON = GLFW_KEY_SEMICOLON;
+constexpr int KEY_EQUAL = GLFW_KEY_EQUAL;
+constexpr int KEY_A = GLFW_KEY_A;
+constexpr int KEY_B = GLFW_KEY_B;
+constexpr int KEY_C = GLFW_KEY_C;
+constexpr int KEY_D = GLFW_KEY_D;
+constexpr int KEY_E = GLFW_KEY_E;
+constexpr int KEY_F = GLFW_KEY_F;
+constexpr int KEY_G = GLFW_KEY_G;
+constexpr int KEY_H = GLFW_KEY_H;
+constexpr int KEY_I = GLFW_KEY_I;
+constexpr int KEY_J = GLFW_KEY_J;
+constexpr int KEY_K = GLFW_KEY_K;
+constexpr int KEY_L = GLFW_KEY_L;
+constexpr int KEY_M = GLFW_KEY_M;
+constexpr int KEY_N = GLFW_KEY_N;
+constexpr int KEY_O = GLFW_KEY_O;
+constexpr int KEY_P = GLFW_KEY_P;
+constexpr int KEY_Q = GLFW_KEY_Q;
+constexpr int KEY_R = GLFW_KEY_R;
+constexpr int KEY_S = GLFW_KEY_S;
+constexpr int KEY_T = GLFW_KEY_T;
+constexpr int KEY_U = GLFW_KEY_U;
+constexpr int KEY_V = GLFW_KEY_V;
+constexpr int KEY_W = GLFW_KEY_W;
+constexpr int KEY_X = GLFW_KEY_X;
+constexpr int KEY_Y = GLFW_KEY_Y;
+constexpr int KEY_Z = GLFW_KEY_Z;
+constexpr int KEY_LEFT_BRACKET = GLFW_KEY_LEFT_BRACKET;
+constexpr int KEY_BACKSLASH = GLFW_KEY_BACKSLASH;
+constexpr int KEY_RIGHT_BRACKET = GLFW_KEY_RIGHT_BRACKET;
+constexpr int KEY_GRAVE_ACCENT = GLFW_KEY_GRAVE_ACCENT;
+constexpr int KEY_WORLD_1 = GLFW_KEY_WORLD_1;
+constexpr int KEY_WORLD_2 = GLFW_KEY_WORLD_2;
+constexpr int KEY_ESCAPE = GLFW_KEY_ESCAPE;
+constexpr int KEY_ENTER = GLFW_KEY_ENTER;
+constexpr int KEY_TAB = GLFW_KEY_TAB;
+constexpr int KEY_BACKSPACE = GLFW_KEY_BACKSPACE;
+constexpr int KEY_INSERT = GLFW_KEY_INSERT;
+constexpr int KEY_DELETE = GLFW_KEY_DELETE;
+constexpr int KEY_RIGHT = GLFW_KEY_RIGHT;
+constexpr int KEY_LEFT = GLFW_KEY_LEFT;
+constexpr int KEY_DOWN = GLFW_KEY_DOWN;
+constexpr int KEY_UP = GLFW_KEY_UP;
+constexpr int KEY_PAGE_UP = GLFW_KEY_PAGE_UP;
+constexpr int KEY_PAGE_DOWN = GLFW_KEY_PAGE_DOWN;
+constexpr int KEY_HOME = GLFW_KEY_HOME;
+constexpr int KEY_END = GLFW_KEY_END;
+constexpr int KEY_CAPS_LOCK = GLFW_KEY_CAPS_LOCK;
+constexpr int KEY_SCROLL_LOCK = GLFW_KEY_SCROLL_LOCK;
+constexpr int KEY_NUM_LOCK = GLFW_KEY_NUM_LOCK;
+constexpr int KEY_PRINT_SCREEN = GLFW_KEY_PRINT_SCREEN;
+constexpr int KEY_PAUSE = GLFW_KEY_PAUSE;
+constexpr int KEY_F1 = GLFW_KEY_F1;
+constexpr int KEY_F2 = GLFW_KEY_F2;
+constexpr int KEY_F3 = GLFW_KEY_F3;
+constexpr int KEY_F4 = GLFW_KEY_F4;
+constexpr int KEY_F5 = GLFW_KEY_F5;
+constexpr int KEY_F6 = GLFW_KEY_F6;
+constexpr int KEY_F7 = GLFW_KEY_F7;
+constexpr int KEY_F8 = GLFW_KEY_F8;
+constexpr int KEY_F9 = GLFW_KEY_F9;
+constexpr int KEY_F10 = GLFW_KEY_F10;
+constexpr int KEY_F11 = GLFW_KEY_F11;
+constexpr int KEY_F12 = GLFW_KEY_F12;
+constexpr int KEY_F13 = GLFW_KEY_F13;
+constexpr int KEY_F14 = GLFW_KEY_F14;
+constexpr int KEY_F15 = GLFW_KEY_F15;
+constexpr int KEY_F16 = GLFW_KEY_F16;
+constexpr int KEY_F17 = GLFW_KEY_F17;
+constexpr int KEY_F18 = GLFW_KEY_F18;
+constexpr int KEY_F19 = GLFW_KEY_F19;
+constexpr int KEY_F20 = GLFW_KEY_F20;
+constexpr int KEY_F21 = GLFW_KEY_F21;
+constexpr int KEY_F22 = GLFW_KEY_F22;
+constexpr int KEY_F23 = GLFW_KEY_F23;
+constexpr int KEY_F24 = GLFW_KEY_F24;
+constexpr int KEY_F25 = GLFW_KEY_F25;
+constexpr int KEY_KP_0 = GLFW_KEY_KP_0;
+constexpr int KEY_KP_1 = GLFW_KEY_KP_1;
+constexpr int KEY_KP_2 = GLFW_KEY_KP_2;
+constexpr int KEY_KP_3 = GLFW_KEY_KP_3;
+constexpr int KEY_KP_4 = GLFW_KEY_KP_4;
+constexpr int KEY_KP_5 = GLFW_KEY_KP_5;
+constexpr int KEY_KP_6 = GLFW_KEY_KP_6;
+constexpr int KEY_KP_7 = GLFW_KEY_KP_7;
+constexpr int KEY_KP_8 = GLFW_KEY_KP_8;
+constexpr int KEY_KP_9 = GLFW_KEY_KP_9;
+constexpr int KEY_KP_DECIMAL = GLFW_KEY_KP_DECIMAL;
+constexpr int KEY_KP_DIVIDE = GLFW_KEY_KP_DIVIDE;
+constexpr int KEY_KP_MULTIPLY = GLFW_KEY_KP_MULTIPLY;
+constexpr int KEY_KP_SUBTRACT = GLFW_KEY_KP_SUBTRACT;
+constexpr int KEY_KP_ADD = GLFW_KEY_KP_ADD;
+constexpr int KEY_KP_ENTER = GLFW_KEY_KP_ENTER;
+constexpr int KEY_KP_EQUAL = GLFW_KEY_KP_EQUAL;
+constexpr int KEY_LEFT_SHIFT = GLFW_KEY_LEFT_SHIFT;
+constexpr int KEY_LEFT_CONTROL = GLFW_KEY_LEFT_CONTROL;
+constexpr int KEY_LEFT_ALT = GLFW_KEY_LEFT_ALT;
+constexpr int KEY_LEFT_SUPER = GLFW_KEY_LEFT_SUPER;
+constexpr int KEY_RIGHT_SHIFT = GLFW_KEY_RIGHT_SHIFT;
+constexpr int KEY_RIGHT_CONTROL = GLFW_KEY_RIGHT_CONTROL;
+constexpr int KEY_RIGHT_ALT = GLFW_KEY_RIGHT_ALT;
+constexpr int KEY_RIGHT_SUPER = GLFW_KEY_RIGHT_SUPER;
+constexpr int KEY_MENU = GLFW_KEY_MENU;
+constexpr int KEY_LAST = GLFW_KEY_LAST;
+constexpr int KEY_MOD_SHIFT = GLFW_MOD_SHIFT;
+constexpr int KEY_MOD_CONTROL = GLFW_MOD_CONTROL;
+constexpr int KEY_MOD_ALT = GLFW_MOD_ALT;
+constexpr int MOD_SUPER = GLFW_MOD_SUPER;
+constexpr int MOD_CAPS_LOCK = GLFW_MOD_CAPS_LOCK;
+constexpr int MOD_NUM_LOCK = GLFW_MOD_NUM_LOCK;
+constexpr int NUM_PIXEL_CHANNELS = 4;
+constexpr int NUM_CURSORS = 6;
+constexpr int NUM_MOUSE_BUTTONS = 3;
+
+enum Axis
+{
+    HORIZONTAL = 0,
+    VERTICAL = 1
+};
+enum ButtonState
+{
+    UP = GLFW_RELEASE,
+    DOWN = GLFW_PRESS
+};
+enum ShapeLoc
+{
+    UPPER_START = 0,
+    UPPER_END = 1,
+    LOWER_END = 2,
+    LOWER_START = 3
+};
+enum Cursor
+{
+    ARROW = GLFW_ARROW_CURSOR,
+    TEXT = GLFW_IBEAM_CURSOR,
+    CROSS = GLFW_CROSSHAIR_CURSOR,
+    HAND = GLFW_HAND_CURSOR,
+    HRESIZE = GLFW_HRESIZE_CURSOR,
+    VRESIZE = GLFW_VRESIZE_CURSOR,
+};
+enum MouseButton
+{
+    LEFT = GLFW_MOUSE_BUTTON_LEFT,
+    RIGHT = GLFW_MOUSE_BUTTON_RIGHT,
+    MIDDLE = GLFW_MOUSE_BUTTON_MIDDLE,
+};
+// - Channel type: float
+// - Range: [0,1]
+using RGBA = glm::vec<NUM_PIXEL_CHANNELS, float, glm::packed_highp>;
+// - 2 float components x and y
+// - Vec2(0,0) is the top-left pixel of the window
+using Vec2 = glm::vec<2, float, glm::packed_highp>;
+using TextureHandle = void*;
+using FontHandle = void*;
+struct MouseSnapshot
+{
+    bool is_down[NUM_MOUSE_BUTTONS] = { false };
+    bool is_pressed[NUM_MOUSE_BUTTONS] = { false };
+    bool is_released[NUM_MOUSE_BUTTONS] = { false };
+    Vec2 pos;
+    Vec2 delta;
+    int  scroll = 0;
+    int  key_mods = 0;
+    bool is_moving = false;
+    bool any_down();
+    bool any_pressed();
+    bool any_released();
+};
+struct KeyboardSnapshot
+{
+    std::set<int> pressed_keys;
+    int typed_char = 0;
+    int key_mods = 0;
+};
+class Observer
+{
+public:
+    void set_enabled(bool flag);
+    bool enabled();
+private:
+    bool enabled_ = true;
+};
+class WindowObserver : public Observer
+{
+public:
+    virtual void on_window_termination() = 0;
+    virtual void on_window_resize() = 0;
+};
+class MouseObserver : public Observer
+{
+public:
+    virtual void on_mouse_move(const MouseSnapshot& mouse) = 0;
+    virtual void on_mouse_press(const MouseSnapshot& mouse) = 0;
+    virtual void on_mouse_release(const MouseSnapshot& mouse) = 0;
+    virtual void on_mouse_scroll(const MouseSnapshot& mouse) = 0;
+};
+class KeyboardObserver : public Observer
+{
+public:
+    virtual void on_key_press(const KeyboardSnapshot& keyboard) = 0;
+    virtual void on_char_type(const KeyboardSnapshot& keyboard) = 0;
+};
+// - Returns a non-zero value if there was an issue during initialization.
+//   width and height must be greater than 0
+bool Init(const std::string& name, const Vec2& size);
+bool AddWindowObserver(WindowObserver* ob);
+bool RemoveWindowObserver(WindowObserver* ob);
+bool AddMouseObserver(MouseObserver* ob);
+bool RemoveMouseObserver(MouseObserver* ob);
+bool AddKeyboardObserver(KeyboardObserver* ob);
+bool RemoveKeyboardObserver(KeyboardObserver* ob);
+// Returns nullptr before quickdraw::window::Init() is called
+GLFWwindow* GetGLFWWindowHandle();
+void SetWindowIcon(std::filesystem::path file);
+// - Returns the time in seconds
+double Time();
+// - Returns the duration of time since the start of the last frame in seconds
+double DeltaTime();
+// - Returns the number of frames since the start of the program so that
+//   0 is returned during the first frame.
+// - A negative number may be returned that the previous frame number is
+// always less than the current
+int FrameNumber();
+// - Returns the size of the drawing context
+Vec2 ViewportSize();
+void SetBackgroundColor(const RGBA& color);
+// - Updates frame information and polls input events
+void NewFrame();
+void DrawFrame();
+bool ShouldClose();
+void Terminate();
+void DrawRect(const Vec2& pos, const Vec2& size);
+void DrawText(const Vec2& pos, const std::string& Text);
+// - Works best with high resolution curves.
+// - points.size() cannot be less than 2
+void DrawPath(const std::vector<Vec2>& points, float thickness, const Vec2& offset = Vec2(0));
+// - When the image is drawn its pixels are multiplied by the current fill color.
+// - For example, if fill = RGBA(0,0,0,0) the image is invisible,
+//   if fill = RGBA(1,0,1,0.5) the image is half transparent and only the
+//   red and blue channels are visible.
+void DrawTexture(TextureHandle handle, const Vec2& pos, const Vec2& size);
+// - Filetype must be supoprted by stb_image
+std::pair<TextureHandle, Vec2> LoadTexture(std::filesystem::path file);
+void EnableScissor(const Vec2& pos, const Vec2& size);
+// - Disables the scissor test
+void DisableScissor();
+void SetFillColor(const RGBA& color, ShapeLoc loc);
+void SetFillColor(const RGBA& color);
+void SetOutlineColor(const RGBA& color, ShapeLoc loc);
+void SetOutlineColor(const RGBA& color);
+void SetRectRoundedMask(bool mask, ShapeLoc loc);
+void SetRectRoundedMask(bool mask);
+void SetRectRoundedSize(float size);
+// Sets the thickness of the outline of the rectangle to be drawn
+void SetOutlineThickness(float thickness);
+// - Sets the scale of Text. Make sure to set the desired Text scale before
+//   calling TextSize(...)
+void SetTextScale(float scale);
+void SetTextSpacing(float spacing);
+// - Returns the size of the bounding box of str if it were drawn on the screen.
+// - Make sure to set the desired Text scale before calling this method.
+Vec2 TextSize(const std::string& str);
+void SetCursor(Cursor cursor);
+// - Shows/hides the cursor when inside the window
+void SetCursorEnabled(bool flag);
+// - Returns nullptr if font could not be loaded
+// - Filetype must be supported by FreeType
+FontHandle LoadFont(int resolution, std::filesystem::path path);
+// - Must be an underlying pointer returned by LoadFont
+// - Passing nullptr sets the default font to active
+void SetActiveFont(FontHandle font);
+namespace detail
 {
 enum QuadMode
 {
@@ -28,12 +325,14 @@ struct BinaryStateSaver;
 struct DynamicVertexAttribs;
 struct StaticVertexAttribs;
 struct Glyph;
+struct Texture;
+class Font;
 void SetQuadMode(QuadMode mode);
 void SetRectPosAndSize(const Vec2& pos, const Vec2& size);
 void SetPathThickness(float thickness);
 void DrawQuad();
 Vec2 Normal(const Vec2& slope);
-std::pair<Texture*, Vec2> LoadTexture(int width, int height, std::vector<GLubyte> rgba_bitmap);
+std::pair<TextureHandle, Vec2> LoadTexture(int width, int height, std::vector<GLubyte> rgba_bitmap);
 void PackTextures();
 void GLFWErrorCallback(int error, const char* description);
 void WindowSizeCallback(GLFWwindow* window_ptr, int width, int height);
@@ -48,9 +347,8 @@ void InitCursors();
 void KeyCallback(GLFWwindow* window_ptr, int key, int scancode, int action, int mods);
 MouseSnapshot CopyMouseState();
 KeyboardSnapshot CopyKeyboardState();
+} // namespace detail
 
-} // namespace
-}
 #define QUICKDRAW_NOTIFY_OBSERVERS(arg_observer_type, arg_observers, arg_member_function) \
 {\
 std::set<arg_observer_type*> observers_this_notification = arg_observers; \
@@ -61,18 +359,185 @@ for (arg_observer_type* ob : observers_this_notification)\
 }
 #define QUICKDRAW_ANY_MOUSE_BUTTON_TRUE(bool_array) bool_array[LEFT] || bool_array[MIDDLE] || bool_array[RIGHT]
 // DEFINITIONS
-namespace quickdraw
+
+namespace detail
 {
-namespace
+std::istringstream FRAGMENT_SHADER_CODE(
+R"~(
+
+#version 450 compatibility
+layout(std430, binding = 0) buffer Quads
 {
-    struct Glyph
-    {
-        Texture* texture = nullptr;
-        Vec2 size = Vec2(0);
-        Vec2 bearing = Vec2(0);
-        float advance = 0;
-    };
+float quad_array[];
+};
+
+uniform sampler2D texture_atlas;
+
+in vec2 frag_pos;
+in float frag_corner_mask;
+in vec4 frag_fill_color;
+in vec4 frag_outline_color;
+in vec2 frag_uv;
+flat in unsigned int frag_quad_index;
+
+out vec4 color_out;
+
+#define MODE_RECT 0
+#define MODE_TEXTURE 1
+#define MODE_PATH 2
+
+bool in_bounds(float x, float mini, float maxi)
+{
+return x >= mini && x <= maxi;
 }
+
+float map(float value, float min1, float max1, float min2, float max2)
+{
+return min2 + (value - min1) * (max2 - min2) / (max1 - min1);
+}
+
+vec2 rect_pos()
+{
+return vec2(quad_array[frag_quad_index + 0], quad_array[frag_quad_index + 1]);
+}
+vec2 rect_size()
+{
+return vec2(quad_array[frag_quad_index + 2], quad_array[frag_quad_index + 3]);
+}
+float path_thickness()
+{
+return quad_array[frag_quad_index + 2];
+}
+float quad_mode()
+{
+return quad_array[frag_quad_index + 4];
+}
+float quad_outline_thickness()
+{
+return quad_array[frag_quad_index + 5];
+}
+float rect_corner_size()
+{
+return quad_array[frag_quad_index + 6];
+}
+
+void main()
+{
+vec4 color = frag_fill_color;
+
+if (quad_mode() == MODE_TEXTURE)
+{
+	color *= texture(texture_atlas, frag_uv);
+}
+else  if (quad_mode() == MODE_PATH)
+{
+	// Pixel is in the outline
+	if (path_thickness() * (1 - abs((frag_uv.y - 0.5) * 2)) < quad_outline_thickness())
+	{
+		color = frag_outline_color;
+	}
+}
+else if (quad_mode() == MODE_RECT)
+{
+	vec2 local_frag_pos = frag_pos - rect_pos();
+	vec2 local_vert_pos = round(frag_uv) * rect_size(); // Closest vertex to fragment
+
+	if (round(frag_corner_mask) == 0)
+	{
+		// Pixel is in the outline
+		vec2 frag_to_vert_dist = abs(local_vert_pos - local_frag_pos);
+		if (frag_to_vert_dist.x < quad_outline_thickness() || frag_to_vert_dist.y < quad_outline_thickness())
+		{
+			color = frag_outline_color;
+		}
+	}
+	else
+	{
+		if (in_bounds(local_frag_pos.x, rect_corner_size(), rect_size().x - rect_corner_size()) || in_bounds(local_frag_pos.y, rect_corner_size(), rect_size().y - rect_corner_size()))
+		{
+			// Pixel is in the outline
+			vec2 frag_to_vert_dist = abs(local_vert_pos - local_frag_pos);
+			if (frag_to_vert_dist.x < quad_outline_thickness() || frag_to_vert_dist.y < quad_outline_thickness())
+			{
+				color = frag_outline_color;
+			}
+		}
+
+		else
+		{
+			vec2 origin = local_vert_pos - rect_corner_size() * (round(frag_uv) * 2 - 1);
+			float dist = distance(local_frag_pos, origin);
+
+			// Pixel is outside the rounded rect
+			if (dist > rect_corner_size())
+			{
+				discard;
+			}
+
+			// Pixel is in the outline
+			else if (dist > rect_corner_size() - quad_outline_thickness())
+			{
+				color = frag_outline_color;
+			}
+		}
+	}
+}
+
+color_out = color;
+}
+)~");
+
+
+    std::istringstream VERTEX_SHADER_CODE(
+        R"~(
+#version 450 compatibility
+
+// Dynamic attributes
+layout(location = 0) in vec2 pos;
+layout(location = 1) in float corner_mask;
+layout(location = 2) in vec4 fill_color;
+layout(location = 3) in vec4 outline_color;
+layout(location = 4) in vec2 uv;
+
+// Static attributes
+layout(location = 5) in unsigned int quad_index;
+
+uniform vec2 transform;
+
+out vec2 frag_pos;
+out float frag_corner_mask;
+out vec4 frag_fill_color;
+out vec4 frag_outline_color;
+
+out vec2 frag_uv;
+flat out unsigned int frag_quad_index;
+
+void main()
+{
+frag_pos					= pos;
+frag_corner_mask			= corner_mask;
+frag_fill_color				= fill_color;
+frag_outline_color			= outline_color;	
+frag_uv						= uv;
+frag_quad_index             = quad_index;
+	
+// vert_pos is in pixel space with the origin at the top left corner of the context
+// y coordinates increase down the screen, ie flipped
+	
+vec2 ndc_pos = (pos*transform-0.5)*2;
+gl_Position = vec4(ndc_pos.x, -ndc_pos.y,0.5,1);
+}
+)~");
+constexpr size_t ATTRIBS_PER_QUAD = 7;
+constexpr size_t VERTS_PER_QUAD = 4;
+constexpr size_t ELEMS_PER_QUAD = 6;
+struct Glyph
+{
+    TextureHandle texture = nullptr;
+    Vec2 size = Vec2(0);
+    Vec2 bearing = Vec2(0);
+    float advance = 0;
+};
 struct Texture
 {
     std::vector<GLubyte> bitmap = std::vector<GLubyte>(0);
@@ -87,17 +552,17 @@ public:
     static constexpr bool IsDisplayableChar(unsigned char c);
     Font(int resolution, std::filesystem::path path);
     // Returns this->end() if IsDisplayableChar(c) is false
-    Glyph* get(unsigned char c)
+    detail::Glyph* get(unsigned char c)
     {
         if (!IsDisplayableChar(c))
             return end();
         return begin() + (c - FIRST_VALID_CHAR);
     }
-    Glyph* begin()
+    detail::Glyph* begin()
     {
         return &glyphs_[0];
     }
-    Glyph* end()
+    detail::Glyph* end()
     {
         return glyphs_ + NUM_VALID_CHARS;
     }
@@ -121,18 +586,12 @@ private:
     static constexpr unsigned char FIRST_VALID_CHAR = 33;
     static constexpr unsigned char LAST_VALID_CHAR = 126;
     static constexpr int NUM_VALID_CHARS = 1 + LAST_VALID_CHAR - FIRST_VALID_CHAR;
-    Glyph glyphs_[NUM_VALID_CHARS];
+    detail::Glyph glyphs_[NUM_VALID_CHARS];
     bool ready_to_use_ = false;
-    float horizontal_spacing_ = 3;
     float font_offset_ = 0;
     float font_height_ = 0;
     float space_character_width_ = 0;
 };
-namespace
-{
-constexpr size_t ATTRIBS_PER_QUAD = 7;
-constexpr size_t VERTS_PER_QUAD = 4;
-constexpr size_t ELEMS_PER_QUAD = 6;
 template<typename T>
 struct BinaryStateSaver
 {
@@ -163,12 +622,13 @@ GLuint texture_atlas_handle = 0;
 GLuint transform_handle, shader_handle;
 GLuint quad_vao, vertex_dynamic_attribs_vbo, vertex_static_attribs_vbo, vertex_ebo, quad_attribs_ssbo;
 Font* active_font = nullptr;
-std::unique_ptr<Font> default_font = nullptr;
+Font* default_font = nullptr;
 GLuint BASE_VERTEX_ELEMS[ELEMS_PER_QUAD]{ 2, 1, 0, 2, 0, 3 };
 std::set<WindowObserver*> window_observers;
 std::set<MouseObserver*> mouse_observers;
 std::set<KeyboardObserver*> keyboard_observers;
 std::list<Texture> atlas_textures;
+std::list<Font> fonts;
 GLFWcursor* cursor_ptrs[NUM_CURSORS];
 std::vector<DynamicVertexAttribs> vertex_dynamic_attribs_to_draw;
 std::vector<StaticVertexAttribs> vertex_static_attribs_to_draw;
@@ -207,31 +667,7 @@ bool InitOpenGL()
 
     std::filesystem::path vertex_shader_path = std::filesystem::current_path() / "resources" / "quad.vert";
     std::filesystem::path fragment_shader_path = std::filesystem::current_path() / "resources" / "quad.frag";
-    std::string vert_code, frag_code;
-    std::ifstream vert_file, frag_file;
-
-    vert_file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-    frag_file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-
-    try
-    {
-        vert_file.open(vertex_shader_path);
-        frag_file.open(fragment_shader_path);
-        std::stringstream vert_stream, frag_stream;
-        vert_stream << vert_file.rdbuf();
-        frag_stream << frag_file.rdbuf();
-        vert_file.close();
-        frag_file.close();
-        vert_code = vert_stream.str();
-        frag_code = frag_stream.str();
-    }
-    catch (std::ifstream::failure& e)
-    {
-        std::cout << METHOD_ERROR_HEADER << "Failed to read shader file\n"
-            << e.what() << "\n";
-        return false;
-    }
-
+    std::string vert_code = VERTEX_SHADER_CODE.str(), frag_code = FRAGMENT_SHADER_CODE.str();
     const char* vertex_code_cstr = vert_code.c_str();
     const char* fragment_code_cstr = frag_code.c_str();
     GLint success_flag;
@@ -308,7 +744,7 @@ bool InitOpenGL()
     glVertexAttribIPointer(vertex_quad_index_loc, 1, GL_UNSIGNED_INT, sizeof(StaticVertexAttribs), (void*)offsetof(StaticVertexAttribs, StaticVertexAttribs::quad_index));
 
     glGenTextures(1, &texture_atlas_handle);
-    
+
     return true;
 }
 void InitMouse()
@@ -491,8 +927,8 @@ void SetQuadMode(QuadMode mode)
     if (mode == RECT_MODE || mode == PATH_MODE)
     {
         curr_vertex_attribs[UPPER_START].uv = Vec2(0, 0);
-        curr_vertex_attribs[UPPER_END].uv   = Vec2(1, 0);
-        curr_vertex_attribs[LOWER_END].uv   = Vec2(1, 1);
+        curr_vertex_attribs[UPPER_END].uv = Vec2(1, 0);
+        curr_vertex_attribs[LOWER_END].uv = Vec2(1, 1);
         curr_vertex_attribs[LOWER_START].uv = Vec2(0, 1);
     }
 }
@@ -550,7 +986,7 @@ Vec2 Normal(const Vec2& slope)
 {
     return Vec2(slope.y, -slope.x) / glm::length(slope);
 }
-std::pair<Texture*, Vec2> LoadTexture(int width, int height, std::vector<GLubyte> rgba_bitmap)
+std::pair<TextureHandle, Vec2> LoadTexture(int width, int height, std::vector<GLubyte> rgba_bitmap)
 {
     if (width < 1 || height < 1)
     {
@@ -607,10 +1043,9 @@ void PackTextures()
     glBindTexture(GL_TEXTURE_2D, texture_atlas_handle);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, min_atlas_width, min_atlas_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-    glGenerateMipmap(GL_TEXTURE_2D);
 
     rect_index = 0;
     for (Texture& texture : atlas_textures)
@@ -619,14 +1054,108 @@ void PackTextures()
 
         // Set UV coordinates for textures
         texture.uv_start = Vec2((packing_rects[rect_index].x + rect_spacing) / (double)min_atlas_width, (packing_rects[rect_index].y + rect_spacing) / (double)min_atlas_height);
-        texture.uv_end = Vec2((packing_rects[rect_index].x + rect_spacing + texture.width) / (double)min_atlas_width, (packing_rects[rect_index].y + rect_spacing+ texture.height) / (double)min_atlas_height);
+        texture.uv_end = Vec2((packing_rects[rect_index].x + rect_spacing + texture.width) / (double)min_atlas_width, (packing_rects[rect_index].y + rect_spacing + texture.height) / (double)min_atlas_height);
 
         ++rect_index;
     }
 }
+constexpr bool Font::IsDisplayableChar(unsigned char c)
+{
+    using namespace detail;
+    return c >= FIRST_VALID_CHAR && c <= LAST_VALID_CHAR;
 }
+Font::Font(int resolution, std::filesystem::path path)
+{
+    using namespace detail;
+    FT_Library ft;
+    if (FT_Init_FreeType(&ft))
+    {
+        std::cout << "quickdraw::FontAtlas::FontAtlas Failed to initalize FreeType\n";
+        return;
+    }
+    std::string path_str = path.generic_string();
+    FT_Face face;
+    if (FT_New_Face(ft, path_str.c_str(), 0, &face))
+    {
+        std::cout << "quickdraw::FontAtlas::FontAtlas Failed to load " << path << '\n';
+        return;
+    }
+    FT_Set_Pixel_Sizes(face, 0, resolution);
+
+    std::vector<GLubyte> glyph_bitmaps[NUM_VALID_CHARS];
+    int min_atlas_area = 0;
+    // width / rows
+    float avg_glyph_aspect_ratio = 0;
+
+    // Load displayable characters
+    float ADVANCE_FAC = 1.0f / float(1 << 6);
+    for (int k = 0; k < NUM_VALID_CHARS; k++)
+    {
+        Glyph& glyph = glyphs_[k];
+        if (FT_Load_Char(face, k + FIRST_VALID_CHAR, FT_LOAD_RENDER))
+        {
+            std::cout << "quickdraw::FontAtlas::FontAtlas Failed to load \'" << (char)(k + FIRST_VALID_CHAR) << "\'\n";
+            return;
+        }
+        min_atlas_area += face->glyph->bitmap.width * face->glyph->bitmap.rows;
+        avg_glyph_aspect_ratio += float(face->glyph->bitmap.width) / face->glyph->bitmap.rows;
+        space_character_width_ += face->glyph->bitmap.width; // is the average of displayable character widths
+
+        // Note we set up the glyph uv's later.
+        glyph.size = Vec2(face->glyph->bitmap.width, face->glyph->bitmap.rows);
+        glyph.bearing = Vec2(face->glyph->bitmap_left, face->glyph->bitmap_top);
+        glyph.advance = face->glyph->advance.x * ADVANCE_FAC; // If text quads are positioned incorrectly its probably this
+
+        std::vector<GLubyte> bitmap(glyph.size.x * NUM_PIXEL_CHANNELS * glyph.size.y);
+        for (int x = 0; x < glyph.size.x; x++)
+        {
+            for (int y = 0; y < glyph.size.y; y++)
+            {
+                bitmap[(x + y * glyph.size.x) * NUM_PIXEL_CHANNELS + 0] = 255;
+                bitmap[(x + y * glyph.size.x) * NUM_PIXEL_CHANNELS + 1] = 255;
+                bitmap[(x + y * glyph.size.x) * NUM_PIXEL_CHANNELS + 2] = 255;
+                bitmap[(x + y * glyph.size.x) * NUM_PIXEL_CHANNELS + 3] = face->glyph->bitmap.buffer[x + y * (int)glyph.size.x];
+            }
+        }
+
+        glyph.texture = LoadTexture(glyph.size.x, glyph.size.y, bitmap).first;
+        if (glyph.texture == nullptr)
+        {
+            std::cout << "quickdraw::FontAtlas::FontAtlas Failed to load \'" << path << "\'\n";
+            return;
+        }
+    }
+    space_character_width_ /= NUM_VALID_CHARS; // is the average of displayable character widths
+
+    float font_import_scale = 1.0f / resolution;
+    for (Glyph& g : glyphs_)
+    {
+        g.size *= font_import_scale;
+        g.bearing *= font_import_scale;
+        g.advance *= font_import_scale;
+    }
+    space_character_width_ *= font_import_scale;
+
+    float max_height = 0;
+    for (const auto& g : glyphs_)
+    {
+        if (g.size.y > max_height)
+        {
+            max_height = g.bearing.y;
+        }
+    }
+    font_height_ = max_height;
+    font_offset_ = max_height * 0.5f;
+
+    FT_Done_Face(face);
+    FT_Done_FreeType(ft);
+
+    ready_to_use_ = true;
+}
+} // namespace detail
 bool Init(const std::string& name, const Vec2& size)
 {
+    using namespace detail;
     if ((int)size.x <= 0 || (int)size.y <= 0)
     {
         std::cout << "quickdraw::Init Failed to initialize because width or height was less than 1\n";
@@ -661,8 +1190,8 @@ bool Init(const std::string& name, const Vec2& size)
 
     InitOpenGL();
 
-    default_font = LoadFont(48, "C:\\Windows\\Fonts\\segoeui.ttf");
-    SetActiveFont(default_font.get());
+    default_font = (Font*)LoadFont(48, "C:\\Windows\\Fonts\\segoeuil.ttf");
+    SetActiveFont(default_font);
 
     WindowSizeCallback(glfw_window_handle, (int)viewport_dim.x, (int)viewport_dim.y);
     last_time = glfwGetTime();
@@ -671,6 +1200,7 @@ bool Init(const std::string& name, const Vec2& size)
 }
 void NewFrame()
 {
+    using namespace detail;
     frame_number++;
     delta_time = glfwGetTime() - last_time;
     last_time = glfwGetTime();
@@ -686,6 +1216,7 @@ void NewFrame()
 }
 void DrawFrame()
 {
+    using namespace detail;
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glEnable(GL_MULTISAMPLE);
@@ -741,7 +1272,7 @@ void DrawFrame()
     }
 
     glDrawElements(GL_TRIANGLES, num_quads_this_frame * ELEMS_PER_QUAD, GL_UNSIGNED_INT, 0);
-    
+
     quads_attribs_to_draw.clear();
     vertex_dynamic_attribs_to_draw.clear();
     glfwSwapBuffers(glfw_window_handle);
@@ -750,18 +1281,22 @@ void DrawFrame()
 }
 bool ShouldClose()
 {
+    using namespace detail;
     return glfwWindowShouldClose(glfw_window_handle);
 }
 void Terminate()
 {
+    using namespace detail;
     glfwTerminate();
 }
 void SetBackgroundColor(const RGBA& color)
 {
+    using namespace detail;
     background_color = color;
 }
 void SetWindowIcon(std::filesystem::path file)
 {
+    using namespace detail;
     std::string file_str = file.generic_string();
     GLFWimage image = {};
     image.pixels = stbi_load(file_str.c_str(), &image.width, &image.height, nullptr, 4);
@@ -770,6 +1305,7 @@ void SetWindowIcon(std::filesystem::path file)
 }
 GLFWwindow* GetGLFWWindowHandle()
 {
+    using namespace detail;
     if (glfw_window_handle == nullptr)
     {
         std::cout << "quickdraw::GetGLFWWindowHandle Failed to return handle because quickdraw::Init() has not been called\n";
@@ -778,22 +1314,27 @@ GLFWwindow* GetGLFWWindowHandle()
 }
 double Time()
 {
+    using namespace detail;
     return glfwGetTime();
 }
 double DeltaTime()
 {
+    using namespace detail;
     return delta_time;
 }
 Vec2 ViewportSize()
 {
+    using namespace detail;
     return viewport_dim;
 }
 int FrameNumber()
 {
+    using namespace detail;
     return frame_number;
 }
-std::pair<Texture*, Vec2> LoadTexture(std::filesystem::path file)
+std::pair<TextureHandle, Vec2> LoadTexture(std::filesystem::path file)
 {
+    using namespace detail;
     int width, height;
     auto file_str = file.string();
     GLubyte* stbi_pixel_buffer = stbi_load(file_str.c_str(), &width, &height, nullptr, NUM_PIXEL_CHANNELS);
@@ -809,19 +1350,22 @@ std::pair<Texture*, Vec2> LoadTexture(std::filesystem::path file)
     stbi_image_free(stbi_pixel_buffer);
     return LoadTexture(width, height, my_pixel_buffer);
 }
-void UnloadTexture(Texture* texture_to_remove)
+void UnloadTexture(TextureHandle texture_to_remove)
 {
+    using namespace detail;
     atlas_textures.remove_if([&](const Texture& texture)->bool { return &texture == texture_to_remove; });
     atlas_updated = true;
 }
 void DrawRect(const Vec2& pos, const Vec2& size)
 {
+    using namespace detail;
     SetQuadMode(RECT_MODE);
     SetRectPosAndSize(pos, size);
     DrawQuad();
 }
-void DrawText(const Vec2& pos, const std::string &text)
+void DrawText(const Vec2& pos, const std::string& text)
 {
+    using namespace detail;
     DynamicVertexAttribs saved_vertex_attribs[4];
     for (int k = 0; k < 4; k++)
     {
@@ -845,7 +1389,7 @@ void DrawText(const Vec2& pos, const std::string &text)
         Glyph& glyph = *active_font->get(c);
         float offset = (active_font->font_height() - glyph.bearing.y - active_font->font_offset()) * curr_text_scale;
 
-        Vec2 draw_pos = Vec2(pos.x + glyph.bearing.x * curr_text_scale + curs, pos.y + offset);    
+        Vec2 draw_pos = Vec2(pos.x + glyph.bearing.x * curr_text_scale + curs, pos.y + offset);
         Vec2 draw_size = glyph.size * curr_text_scale;
         curr_vertex_attribs[UPPER_START].fill_color = glm::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, (draw_pos.x - pos.x) / text_width);
         curr_vertex_attribs[UPPER_END].fill_color = glm::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, (draw_pos.x + draw_size.x - pos.x) / text_width);
@@ -863,24 +1407,27 @@ void DrawText(const Vec2& pos, const std::string &text)
         curr_vertex_attribs[k] = saved_vertex_attribs[k];
     }
 }
-void DrawTexture(Texture* texture, const Vec2& pos, const Vec2& size)
+void DrawTexture(TextureHandle handle, const Vec2& pos, const Vec2& size)
 {
+    using namespace detail;
     SetQuadMode(TEXTURE_MODE);
-   
+
     curr_vertex_attribs[UPPER_START].pos = pos;
     curr_vertex_attribs[UPPER_END].pos = Vec2(pos.x + size.x, pos.y);
     curr_vertex_attribs[LOWER_END].pos = pos + size;
     curr_vertex_attribs[LOWER_START].pos = Vec2(pos.x, pos.y + size.y);
 
-    curr_vertex_attribs[UPPER_START].uv = texture->uv_start;
-    curr_vertex_attribs[UPPER_END].uv = Vec2(texture->uv_end.x, texture->uv_start.y);
-    curr_vertex_attribs[LOWER_END].uv = texture->uv_end;
-    curr_vertex_attribs[LOWER_START].uv = Vec2(texture->uv_start.x, texture->uv_end.y);
+    Texture& texture = *(Texture*)handle;
+    curr_vertex_attribs[UPPER_START].uv = texture.uv_start;
+    curr_vertex_attribs[UPPER_END].uv = Vec2(texture.uv_end.x, texture.uv_start.y);
+    curr_vertex_attribs[LOWER_END].uv = texture.uv_end;
+    curr_vertex_attribs[LOWER_START].uv = Vec2(texture.uv_start.x, texture.uv_end.y);
 
     DrawQuad();
 }
 void DrawPath(const std::vector<Vec2>& points, float thickness, const Vec2& offset)
 {
+    using namespace detail;
     if (points.size() < 2)
     {
         std::cout << "quickdraw::window Cannot draw a path with less than 2 points\n";
@@ -910,7 +1457,7 @@ void DrawPath(const std::vector<Vec2>& points, float thickness, const Vec2& offs
         path_length += segment_length;
         length_at_point.push_back(path_length);
     }
-    
+
 
     // Calculate the normal of the previous, current, and next line
     Vec2 line_normal = Normal(points[1] - points[0]);
@@ -933,21 +1480,21 @@ void DrawPath(const std::vector<Vec2>& points, float thickness, const Vec2& offs
     Vec2 end_edge_slope = -(line_normal + next_normal) * end_edge_slope_coeff;
 
     // Set edge data
-    curr_vertex_attribs[UPPER_START].pos            = start_edge_slope + points[0] + offset;
-    curr_vertex_attribs[UPPER_START].fill_color     = glm::mix(saved_vertex_attribs[UPPER_START].fill_color,    saved_vertex_attribs[UPPER_END].fill_color,    length_at_point[0] / path_length);
-    curr_vertex_attribs[UPPER_START].outline_color  = glm::mix(saved_vertex_attribs[UPPER_START].outline_color, saved_vertex_attribs[UPPER_END].outline_color, length_at_point[0] / path_length);
+    curr_vertex_attribs[UPPER_START].pos = start_edge_slope + points[0] + offset;
+    curr_vertex_attribs[UPPER_START].fill_color = glm::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, length_at_point[0] / path_length);
+    curr_vertex_attribs[UPPER_START].outline_color = glm::mix(saved_vertex_attribs[UPPER_START].outline_color, saved_vertex_attribs[UPPER_END].outline_color, length_at_point[0] / path_length);
 
-    curr_vertex_attribs[UPPER_END].pos              = end_edge_slope + points[1] + offset;
-    curr_vertex_attribs[UPPER_END].fill_color       = glm::mix(saved_vertex_attribs[UPPER_START].fill_color,    saved_vertex_attribs[UPPER_END].fill_color,    length_at_point[1] / path_length);
-    curr_vertex_attribs[UPPER_END].outline_color    = glm::mix(saved_vertex_attribs[UPPER_START].outline_color, saved_vertex_attribs[UPPER_END].outline_color, length_at_point[1] / path_length);
+    curr_vertex_attribs[UPPER_END].pos = end_edge_slope + points[1] + offset;
+    curr_vertex_attribs[UPPER_END].fill_color = glm::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, length_at_point[1] / path_length);
+    curr_vertex_attribs[UPPER_END].outline_color = glm::mix(saved_vertex_attribs[UPPER_START].outline_color, saved_vertex_attribs[UPPER_END].outline_color, length_at_point[1] / path_length);
 
-    curr_vertex_attribs[LOWER_END].pos              = -end_edge_slope + points[1] + offset;
-    curr_vertex_attribs[LOWER_END].fill_color       = glm::mix(saved_vertex_attribs[LOWER_START].fill_color,    saved_vertex_attribs[LOWER_END].fill_color,    length_at_point[1] / path_length);
-    curr_vertex_attribs[LOWER_END].outline_color    = glm::mix(saved_vertex_attribs[LOWER_START].outline_color, saved_vertex_attribs[LOWER_END].outline_color, length_at_point[1] / path_length);
+    curr_vertex_attribs[LOWER_END].pos = -end_edge_slope + points[1] + offset;
+    curr_vertex_attribs[LOWER_END].fill_color = glm::mix(saved_vertex_attribs[LOWER_START].fill_color, saved_vertex_attribs[LOWER_END].fill_color, length_at_point[1] / path_length);
+    curr_vertex_attribs[LOWER_END].outline_color = glm::mix(saved_vertex_attribs[LOWER_START].outline_color, saved_vertex_attribs[LOWER_END].outline_color, length_at_point[1] / path_length);
 
-    curr_vertex_attribs[LOWER_START].pos            = -start_edge_slope + points[0] + offset;
-    curr_vertex_attribs[LOWER_START].fill_color     = glm::mix(saved_vertex_attribs[LOWER_START].fill_color,    saved_vertex_attribs[LOWER_END].fill_color,    length_at_point[0] / path_length);
-    curr_vertex_attribs[LOWER_START].outline_color  = glm::mix(saved_vertex_attribs[LOWER_START].outline_color, saved_vertex_attribs[LOWER_END].outline_color, length_at_point[0] / path_length);
+    curr_vertex_attribs[LOWER_START].pos = -start_edge_slope + points[0] + offset;
+    curr_vertex_attribs[LOWER_START].fill_color = glm::mix(saved_vertex_attribs[LOWER_START].fill_color, saved_vertex_attribs[LOWER_END].fill_color, length_at_point[0] / path_length);
+    curr_vertex_attribs[LOWER_START].outline_color = glm::mix(saved_vertex_attribs[LOWER_START].outline_color, saved_vertex_attribs[LOWER_END].outline_color, length_at_point[0] / path_length);
 
     // draw the quad
     DrawQuad();
@@ -959,7 +1506,7 @@ void DrawPath(const std::vector<Vec2>& points, float thickness, const Vec2& offs
         while (k < points.size() - 2)
         {
             // We get the start edge data from the previous end edge
-            curr_vertex_attribs[UPPER_START]    = curr_vertex_attribs[UPPER_END];
+            curr_vertex_attribs[UPPER_START] = curr_vertex_attribs[UPPER_END];
             curr_vertex_attribs[LOWER_START] = curr_vertex_attribs[LOWER_END];
 
             // Use the next normal from the last line as the normal for the current
@@ -973,27 +1520,27 @@ void DrawPath(const std::vector<Vec2>& points, float thickness, const Vec2& offs
             end_edge_slope = -(line_normal + next_normal) * end_edge_slope_coeff;
 
             // Set the end edge data
-            curr_vertex_attribs[UPPER_END].pos              = end_edge_slope + points[k + 1] + offset;
-            curr_vertex_attribs[UPPER_END].fill_color       = glm::mix(saved_vertex_attribs[UPPER_START].fill_color,    saved_vertex_attribs[UPPER_END].fill_color,    length_at_point[k + 1] / path_length);
-            curr_vertex_attribs[UPPER_END].outline_color    = glm::mix(saved_vertex_attribs[UPPER_START].outline_color, saved_vertex_attribs[UPPER_END].outline_color, length_at_point[k + 1] / path_length);
+            curr_vertex_attribs[UPPER_END].pos = end_edge_slope + points[k + 1] + offset;
+            curr_vertex_attribs[UPPER_END].fill_color = glm::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, length_at_point[k + 1] / path_length);
+            curr_vertex_attribs[UPPER_END].outline_color = glm::mix(saved_vertex_attribs[UPPER_START].outline_color, saved_vertex_attribs[UPPER_END].outline_color, length_at_point[k + 1] / path_length);
 
-            curr_vertex_attribs[LOWER_END].pos           = -end_edge_slope + points[k + 1] + offset;
-            curr_vertex_attribs[LOWER_END].fill_color    = glm::mix(saved_vertex_attribs[LOWER_START].fill_color,    saved_vertex_attribs[LOWER_END].fill_color,    length_at_point[k + 1] / path_length);
+            curr_vertex_attribs[LOWER_END].pos = -end_edge_slope + points[k + 1] + offset;
+            curr_vertex_attribs[LOWER_END].fill_color = glm::mix(saved_vertex_attribs[LOWER_START].fill_color, saved_vertex_attribs[LOWER_END].fill_color, length_at_point[k + 1] / path_length);
             curr_vertex_attribs[LOWER_END].outline_color = glm::mix(saved_vertex_attribs[LOWER_START].outline_color, saved_vertex_attribs[LOWER_END].outline_color, length_at_point[k + 1] / path_length);
-            
+
             DrawQuad();
             k++;
         }
 
         // draw the last line
         end_edge_slope = -next_normal * thickness;
-        curr_vertex_attribs[UPPER_START]             = curr_vertex_attribs[UPPER_END];
-        curr_vertex_attribs[LOWER_START]             = curr_vertex_attribs[LOWER_END];
-        curr_vertex_attribs[UPPER_END].pos           = end_edge_slope  + points[k + 1] + offset;
-        curr_vertex_attribs[UPPER_END].fill_color    = glm::mix(saved_vertex_attribs[UPPER_START].fill_color,    saved_vertex_attribs[UPPER_END].fill_color,    length_at_point[k + 1] / path_length);
+        curr_vertex_attribs[UPPER_START] = curr_vertex_attribs[UPPER_END];
+        curr_vertex_attribs[LOWER_START] = curr_vertex_attribs[LOWER_END];
+        curr_vertex_attribs[UPPER_END].pos = end_edge_slope + points[k + 1] + offset;
+        curr_vertex_attribs[UPPER_END].fill_color = glm::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, length_at_point[k + 1] / path_length);
         curr_vertex_attribs[UPPER_END].outline_color = glm::mix(saved_vertex_attribs[UPPER_START].outline_color, saved_vertex_attribs[UPPER_END].outline_color, length_at_point[k + 1] / path_length);
-        curr_vertex_attribs[LOWER_END].pos           = -end_edge_slope + points[k + 1] + offset;
-        curr_vertex_attribs[LOWER_END].fill_color    = glm::mix(saved_vertex_attribs[LOWER_START].fill_color,    saved_vertex_attribs[LOWER_END].fill_color,    length_at_point[k + 1] / path_length);
+        curr_vertex_attribs[LOWER_END].pos = -end_edge_slope + points[k + 1] + offset;
+        curr_vertex_attribs[LOWER_END].fill_color = glm::mix(saved_vertex_attribs[LOWER_START].fill_color, saved_vertex_attribs[LOWER_END].fill_color, length_at_point[k + 1] / path_length);
         curr_vertex_attribs[LOWER_END].outline_color = glm::mix(saved_vertex_attribs[LOWER_START].outline_color, saved_vertex_attribs[LOWER_END].outline_color, length_at_point[k + 1] / path_length);
 
         DrawQuad();
@@ -1005,10 +1552,12 @@ void DrawPath(const std::vector<Vec2>& points, float thickness, const Vec2& offs
 }
 void SetFillColor(const RGBA& color, ShapeLoc loc)
 {
+    using namespace detail;
     curr_vertex_attribs[loc].fill_color = color;
 }
 void SetFillColor(const RGBA& color)
 {
+    using namespace detail;
     SetFillColor(color, UPPER_START);
     SetFillColor(color, UPPER_END);
     SetFillColor(color, LOWER_END);
@@ -1016,10 +1565,12 @@ void SetFillColor(const RGBA& color)
 }
 void SetOutlineColor(const RGBA& color, ShapeLoc loc)
 {
+    using namespace detail;
     curr_vertex_attribs[loc].outline_color = color;
 }
 void SetOutlineColor(const RGBA& color)
 {
+    using namespace detail;
     SetOutlineColor(color, UPPER_START);
     SetOutlineColor(color, UPPER_END);
     SetOutlineColor(color, LOWER_END);
@@ -1027,10 +1578,12 @@ void SetOutlineColor(const RGBA& color)
 }
 void SetRectRoundedMask(bool mask, ShapeLoc loc)
 {
+    using namespace detail;
     curr_vertex_attribs[loc].corner_mask = mask;
 }
 void SetRectRoundedMask(bool mask)
 {
+    using namespace detail;
     SetRectRoundedMask(mask, UPPER_START);
     SetRectRoundedMask(mask, UPPER_END);
     SetRectRoundedMask(mask, LOWER_END);
@@ -1038,193 +1591,96 @@ void SetRectRoundedMask(bool mask)
 }
 void SetOutlineThickness(float thickness)
 {
+    using namespace detail;
     curr_quad_attribs[5] = thickness;
 }
 void SetRectRoundedSize(float size)
 {
+    using namespace detail;
     curr_quad_attribs[6] = size;
 }
 Vec2 TextSize(const std::string& str)
 {
+    using namespace detail;
     return Vec2(GetTextWidth(str), GetTextHeight());
 }
 void SetTextScale(float s)
 {
+    using namespace detail;
     curr_text_scale = s;
 }
 void SetTextSpacing(float spacing)
 {
+    using namespace detail;
     curr_text_spacing = spacing;
 }
 void EnableScissor(const Vec2& pos, const Vec2& size)
 {
+    using namespace detail;
     glEnable(GL_SCISSOR_TEST);
     glScissor((GLint)pos.x, (GLint)(viewport_dim.y - pos.y - size.y), (GLint)size.x, (GLint)size.y);
 }
 void DisableScissor()
 {
+    using namespace detail;
     glDisable(GL_SCISSOR_TEST);
-}
-void Observer::set_enabled(bool flag)
-{
-    enabled_ = flag;
-}
-bool Observer::enabled()
-{
-    return enabled_;
 }
 bool AddWindowObserver(WindowObserver* ob)
 {
+    using namespace detail;
     return window_observers.insert(ob).second;
 }
 bool RemoveWindowObserver(WindowObserver* ob)
 {
+    using namespace detail;
     return window_observers.erase(ob);
 }
 bool AddMouseObserver(MouseObserver* ob)
 {
+    using namespace detail;
     return mouse_observers.insert(ob).second;
 }
 bool RemoveMouseObserver(MouseObserver* ob)
 {
+    using namespace detail;
     return mouse_observers.erase(ob);
 }
 bool AddKeyboardObserver(KeyboardObserver* ob)
 {
+    using namespace detail;
     return keyboard_observers.insert(ob).second;
 }
 bool RemoveKeyboardObserver(KeyboardObserver* ob)
 {
+    using namespace detail;
     return keyboard_observers.erase(ob);
 }
 void SetCursor(Cursor cursor)
 {
+    using namespace detail;
     glfwSetCursor(glfw_window_handle, cursor_ptrs[cursor - ARROW]);
 }
 void SetCursorEnabled(bool flag)
 {
+    using namespace detail;
     glfwSetInputMode(glfw_window_handle, GLFW_CURSOR, flag ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_HIDDEN);
 }
-bool MouseSnapshot::any_down()
+void SetActiveFont(FontHandle font)
 {
-    return QUICKDRAW_ANY_MOUSE_BUTTON_TRUE(is_down);
+    using namespace detail;
+    if (font == nullptr)
+        active_font = default_font;
+    else
+        active_font = (Font*)font;
 }
-bool MouseSnapshot::any_pressed()
+FontHandle LoadFont(int resolution, std::filesystem::path path)
 {
-    return QUICKDRAW_ANY_MOUSE_BUTTON_TRUE(is_pressed);
-}
-bool MouseSnapshot::any_released()
-{
-    return QUICKDRAW_ANY_MOUSE_BUTTON_TRUE(is_released);
-}
-constexpr bool Font::IsDisplayableChar(unsigned char c)
-{
-    return c >= FIRST_VALID_CHAR && c <= LAST_VALID_CHAR;
-}
-Font::Font(int resolution, std::filesystem::path path)
-{
-    FT_Library ft;
-    if (FT_Init_FreeType(&ft))
-    {
-        std::cout << "quickdraw::FontAtlas::FontAtlas Failed to initalize FreeType\n";
-        return;
-    }
-    std::string path_str = path.generic_string();
-    FT_Face face;
-    if (FT_New_Face(ft, path_str.c_str(), 0, &face))
-    {
-        std::cout << "quickdraw::FontAtlas::FontAtlas Failed to load " << path << '\n';
-        return;
-    }
-    FT_Set_Pixel_Sizes(face, 0, resolution);
-
-    std::vector<GLubyte> glyph_bitmaps[NUM_VALID_CHARS];
-    int min_atlas_area = 0;
-    // width / rows
-    float avg_glyph_aspect_ratio = 0;
-
-    // Load displayable characters
-    float ADVANCE_FAC = 1.0f / float(1 << 6);
-    for (int k = 0; k < NUM_VALID_CHARS; k++)
-    {
-        Glyph& glyph = glyphs_[k];
-        if (FT_Load_Char(face, k + FIRST_VALID_CHAR, FT_LOAD_RENDER))
-        {
-            std::cout << "quickdraw::FontAtlas::FontAtlas Failed to load \'" << (char)(k + FIRST_VALID_CHAR) << "\'\n";
-            return;
-        }
-        min_atlas_area += face->glyph->bitmap.width * face->glyph->bitmap.rows;
-        avg_glyph_aspect_ratio += float(face->glyph->bitmap.width) / face->glyph->bitmap.rows;
-        space_character_width_ += face->glyph->bitmap.width; // is the average of displayable character widths
-
-        // Note we set up the glyph uv's later.
-        glyph.size = Vec2(face->glyph->bitmap.width, face->glyph->bitmap.rows);
-        glyph.bearing = Vec2(face->glyph->bitmap_left, face->glyph->bitmap_top);
-        glyph.advance = face->glyph->advance.x * ADVANCE_FAC + horizontal_spacing_; // If text quads are positioned incorrectly its probably this
-
-        std::vector<GLubyte> bitmap(glyph.size.x * NUM_PIXEL_CHANNELS * glyph.size.y);
-        for (int x = 0; x < glyph.size.x; x++)
-        {
-            for (int y = 0; y < glyph.size.y; y++)
-            {
-                bitmap[(x + y * glyph.size.x) * NUM_PIXEL_CHANNELS + 0] = 255;
-                bitmap[(x + y * glyph.size.x) * NUM_PIXEL_CHANNELS + 1] = 255;
-                bitmap[(x + y * glyph.size.x) * NUM_PIXEL_CHANNELS + 2] = 255;
-                bitmap[(x + y * glyph.size.x) * NUM_PIXEL_CHANNELS + 3] = face->glyph->bitmap.buffer[x + y * (int)glyph.size.x];
-            }
-        }
-
-        glyph.texture = LoadTexture(glyph.size.x, glyph.size.y, bitmap).first;
-        if (glyph.texture == nullptr)
-        {
-            std::cout << "quickdraw::FontAtlas::FontAtlas Failed to load \'" << path << "\'\n";
-            return;
-        }
-    }
-    space_character_width_ /= NUM_VALID_CHARS; // is the average of displayable character widths
-
-    float font_import_scale = 1.0f / resolution;
-    for (Glyph& g : glyphs_)
-    {
-        g.size *= font_import_scale;
-        g.bearing *= font_import_scale;
-        g.advance *= font_import_scale;
-    }
-    space_character_width_ *= font_import_scale;
-
-    float max_height = 0;
-    for (const auto& g : glyphs_)
-    {
-        if (g.size.y > max_height)
-        {
-            max_height = g.bearing.y;
-        }
-    }
-    font_height_ = max_height;
-    font_offset_ = max_height * 0.5f;
-
-    FT_Done_Face(face);
-    FT_Done_FreeType(ft);
-
-    ready_to_use_ = true;
-}
-// Returns this->end() if IsDisplayableChar(c) is false
-std::unique_ptr<Font> LoadFont(int resolution, std::filesystem::path path)
-{
-    auto new_font = std::make_unique<Font>(resolution, path);
-    if (!new_font->ready_to_use())
+    using namespace detail;
+    Font& new_font = fonts.emplace_back(resolution, path);
+    if (!new_font.ready_to_use())
     {
         return nullptr;
     }
-    return new_font;
-}
-void SetActiveFont(Font* font)
-{
-    if (font == nullptr)
-        active_font = default_font.get();
-    else
-        active_font = font;
+    return &new_font;
 }
 }
-
-
