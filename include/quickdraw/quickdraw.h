@@ -264,11 +264,11 @@ void DrawFrame();
 bool ShouldClose();
 void Terminate();
 void DrawRect(const Vec2& pos, const Vec2& size);
-void DrawText(const Vec2& pos, const std::string &Text);
+void DrawText(const Vec2& pos, const std::string &Text);                 
 // - Works best with high resolution curves.
 // - points.size() cannot be less than 2
-void DrawPath(const std::vector<Vec2>& points, float thickness, const Vec2& offset = Vec2(0));
-// - When the image is drawn its pixels are multiplied by the current fill color.
+ void DrawPath(const std::vector<Vec2>& points, float thickness, const Vec2& offset = Vec2(0));
+ // - When the image is drawn its pixels are multiplied by the current fill color.
 // - For example, if fill = RGBA(0,0,0,0) the image is invisible,
 //   if fill = RGBA(1,0,1,0.5) the image is half transparent and only the
 //   red and blue channels are visible.

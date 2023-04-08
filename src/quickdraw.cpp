@@ -44,7 +44,7 @@ void ProcessMouseEvents();
 bool InitOpenGL();
 void InitMouse();
 void InitKeyboard();
-void InitGLFWCursors();
+void InitCursors();
 void KeyCallback(GLFWwindow* window_ptr, int key, int scancode, int action, int mods);
 MouseSnapshot CopyMouseState();
 KeyboardSnapshot CopyKeyboardState();
@@ -655,6 +655,7 @@ bool Init(const std::string& name, const Vec2& size)
     }
     glfwMakeContextCurrent(glfw_window_handle);
     glfwSetWindowSizeCallback(glfw_window_handle, WindowSizeCallback);
+    InitCursors();
     InitMouse();
     InitKeyboard();
 
@@ -1088,11 +1089,11 @@ bool RemoveMouseObserver(MouseObserver* ob)
 {
     return mouse_observers.erase(ob);
 }
-bool AddObserver(KeyboardObserver* ob)
+bool AddKeyboardObserver(KeyboardObserver* ob)
 {
     return keyboard_observers.insert(ob).second;
 }
-bool RemoveObserver(KeyboardObserver* ob)
+bool RemoveKeyboardObserver(KeyboardObserver* ob)
 {
     return keyboard_observers.erase(ob);
 }
