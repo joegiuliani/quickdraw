@@ -29,6 +29,9 @@
     <ClCompile Include="src\quickdraw.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="demo.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\quickdraw\quickdraw.h">

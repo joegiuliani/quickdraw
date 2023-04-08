@@ -1,11 +1,11 @@
 #ifndef QUICKDRAW_QUICKDRAW_H_
 #define QUICKDRAW_QUICKDRAW_H_
-#include "glad/glad.h"
-#include "GLFW/glfw3native.h"
-#include "GLFW/glfw3.h"
-#include "glm/glm.hpp"
-#include "glm/vec2.hpp"
-#include "glm/vec4.hpp"
+#include "../glad/glad.h"
+#include "../GLFW/glfw3native.h"
+#include "../GLFW/glfw3.h"
+#include "../glm/glm.hpp"
+#include "../glm/vec2.hpp"
+#include "../glm/vec4.hpp"
 #include <set>
 #include <string>
 #include <vector>

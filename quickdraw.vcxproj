@@ -145,6 +145,7 @@
     <None Include="resources\quad.vert" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="demo.cpp" />
     <ClCompile Include="src\glad.c" />
     <ClCompile Include="src\quickdraw.cpp" />
   </ItemGroup>
