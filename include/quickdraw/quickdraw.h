@@ -278,10 +278,10 @@ double DeltaTime();
 // - A negative number may be returned that the previous frame number is
 // always less than the current
 int FrameNumber();
-// Returns the size of the drawing context
+// - Returns the size of the drawing context
 Vec2 ViewportSize();
 void SetBackgroundColor(const RGBA& color);
-// Updates frame information and polls input events
+// - Updates frame information and polls input events
 void NewFrame();
 void DrawFrame();
 bool ShouldClose();
@@ -296,9 +296,10 @@ void DrawText(const Vec2& pos, const std::string &Text);
 //   if fill = RGBA(1,0,1,0.5) the image is half transparent and only the
 //   red and blue channels are visible.
 void DrawTexture(Texture* texture, const Vec2& pos, const Vec2& size);
+// - Filetype must be supoprted by stb_image
 std::pair<Texture*, Vec2> LoadTexture(std::filesystem::path file);
 void EnableScissor(const Vec2& pos, const Vec2& size);
-// Disables the scissor test
+// - Disables the scissor test
 void DisableScissor();
 void SetFillColor(const RGBA& color, ShapeLoc loc);
 void SetFillColor(const RGBA& color);
@@ -309,17 +310,18 @@ void SetRectRoundedMask(bool mask);
 void SetRectRoundedSize(float size);
 // Sets the thickness of the outline of the rectangle to be drawn
 void SetOutlineThickness(float thickness);
-// Sets the scale of Text. Make sure to set the desired Text scale before
-// calling TextSize(...)
+// - Sets the scale of Text. Make sure to set the desired Text scale before
+//   calling TextSize(...)
 void SetTextScale(float scale);
 void SetTextSpacing(float spacing);
-// Returns the size of the bounding box of str if it were drawn on the screen.
-// Make sure to set the desired Text scale before calling this method.
+// - Returns the size of the bounding box of str if it were drawn on the screen.
+// - Make sure to set the desired Text scale before calling this method.
 Vec2 TextSize(const std::string& str);
 void SetCursor(Cursor cursor);
-// Shows/hides the cursor when inside the window
+// - Shows/hides the cursor when inside the window
 void SetCursorEnabled(bool flag);
-// Returns nullptr if font could not be loaded
+// - Returns nullptr if font could not be loaded
+// - Filetype must be supported by FreeType
 std::unique_ptr<Font> LoadFont(int resolution, std::filesystem::path path);
 // - Must be an underlying pointer returned by LoadFont
 // - Passing nullptr sets the default font to active
