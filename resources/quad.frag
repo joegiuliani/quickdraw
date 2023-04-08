@@ -76,7 +76,7 @@ void main()
 		vec2 local_frag_pos = frag_pos-rect_pos();
 		vec2 local_vert_pos = round(frag_uv)*rect_size(); // Closest vertex to fragment
 
-		if (in_bounds(local_frag_pos.x, rect_corner_size(), rect_size().x-rect_corner_size()) || in_bounds(local_frag_pos.y, rect_corner_size(), rect_size().y-rect_corner_size()))
+		if (round(frag_corner_mask) == 0)
 		{
 			// Pixel is in the outline
 			vec2 frag_to_vert_dist = abs(local_vert_pos - local_frag_pos);
@@ -85,22 +85,34 @@ void main()
 				color = frag_outline_color;
 			}
 		}
-
-		else if (round(frag_corner_mask) != 0)
+		else
 		{
-			vec2 origin = local_vert_pos - rect_corner_size() * (round(frag_uv)*2-1);
-			float dist = distance(local_frag_pos, origin);
-
-			// Pixel is outside the rounded rect
-			if (dist > rect_corner_size())
+			if (in_bounds(local_frag_pos.x, rect_corner_size(), rect_size().x-rect_corner_size()) || in_bounds(local_frag_pos.y, rect_corner_size(), rect_size().y-rect_corner_size()))
 			{
-				discard;
+				// Pixel is in the outline
+				vec2 frag_to_vert_dist = abs(local_vert_pos - local_frag_pos);
+				if (frag_to_vert_dist.x < quad_outline_thickness() || frag_to_vert_dist.y < quad_outline_thickness())
+				{
+					color = frag_outline_color;
+				}
 			}
 
-			// Pixel is in the outline
-			else if (dist > rect_corner_size() - quad_outline_thickness())
+			else
 			{
-				color = frag_outline_color;
+				vec2 origin = local_vert_pos - rect_corner_size() * (round(frag_uv)*2-1);
+				float dist = distance(local_frag_pos, origin);
+
+				// Pixel is outside the rounded rect
+				if (dist > rect_corner_size())
+				{
+					discard;
+				}
+
+				// Pixel is in the outline
+				else if (dist > rect_corner_size() - quad_outline_thickness())
+				{
+					color = frag_outline_color;
+				}
 			}
 		}
 	}

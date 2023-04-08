@@ -1,20 +1,22 @@
 #ifndef QUICKDRAW_QUICKDRAW_H_
 #define QUICKDRAW_QUICKDRAW_H_
-
 #include "glad/glad.h"
 #include "GLFW/glfw3native.h"
 #include "GLFW/glfw3.h"
 #include "glm/glm.hpp"
 #include "glm/vec2.hpp"
 #include "glm/vec4.hpp"
-
 #include <set>
 #include <string>
 #include <vector>
 #include <filesystem>
+#include <memory>
 
 namespace quickdraw
 {
+struct Texture;
+class Font;
+
 constexpr int KEY_UNKNOWN = GLFW_KEY_UNKNOWN;
 constexpr int KEY_SPACE = GLFW_KEY_SPACE;
 constexpr int KEY_APOSTROPHE = GLFW_KEY_APOSTROPHE;
@@ -143,39 +145,14 @@ constexpr int MOD_ALT = GLFW_MOD_ALT;
 constexpr int MOD_SUPER = GLFW_MOD_SUPER;
 constexpr int MOD_CAPS_LOCK = GLFW_MOD_CAPS_LOCK;
 constexpr int MOD_NUM_LOCK = GLFW_MOD_NUM_LOCK;
-
 constexpr int NUM_PIXEL_CHANNELS = 4;
-
-// - Channel type: float
-// - Range: [0,1]
-using RGBA = glm::vec<NUM_PIXEL_CHANNELS, float, glm::packed_highp>;
-// 2 float components x and y
-using Vec2 = glm::vec<2, float, glm::packed_highp>;
+constexpr int NUM_CURSORS = 6;
+constexpr int NUM_MOUSE_BUTTONS = 3;
 
 enum Axis
 {
     HORIZONTAL = 0,
     VERTICAL = 1
-};
-struct Texture;
-class AbstractObserver
-{
-public:
-    void set_enabled(bool flag);
-    bool enabled();
-private:
-    bool enabled_ = true;
-};
-class WindowTerminationObserver : public AbstractObserver
-{
-public:
-    virtual void on_window_termination() = 0;
-};
-class WindowResizeObserver : public AbstractObserver
-{
-
-public:
-    virtual void on_window_resize() = 0;
 };
 enum ButtonState
 {
@@ -189,26 +166,92 @@ enum ShapeLoc
     LOWER_END = 2,
     LOWER_START = 3
 };
-
-// Returns a non-zero value if there was an issue during initialization.
-// width and height must be greater than 0
+enum Cursor
+{
+    ARROW = GLFW_ARROW_CURSOR,
+    TEXT = GLFW_IBEAM_CURSOR,
+    CROSS = GLFW_CROSSHAIR_CURSOR,
+    HAND = GLFW_HAND_CURSOR,
+    HRESIZE = GLFW_HRESIZE_CURSOR,
+    VRESIZE = GLFW_VRESIZE_CURSOR,
+};
+enum MouseButton
+{
+    LEFT = GLFW_MOUSE_BUTTON_LEFT,
+    RIGHT = GLFW_MOUSE_BUTTON_RIGHT,
+    MIDDLE = GLFW_MOUSE_BUTTON_MIDDLE,
+};
+// - Channel type: float
+// - Range: [0,1]
+using RGBA = glm::vec<NUM_PIXEL_CHANNELS, float, glm::packed_highp>;
+// - 2 float components x and y
+using Vec2 = glm::vec<2, float, glm::packed_highp>;
+struct MouseSnapshot
+{
+    bool is_down[NUM_MOUSE_BUTTONS]     = { false };
+    bool is_pressed[NUM_MOUSE_BUTTONS]  = { false };
+    bool is_released[NUM_MOUSE_BUTTONS] = { false };
+    Vec2 pos;
+    Vec2 delta;
+    int  scroll     = 0;
+    int  key_mods   = 0;
+    bool is_moving  = false;
+    bool any_down();
+    bool any_pressed();
+    bool any_released();
+};
+struct KeyboardSnapshot
+{
+    std::set<int> pressed_keys;
+    int typed_char = 0;
+    int key_mods   = 0;
+};
+class Observer
+{
+public:
+    void set_enabled(bool flag);
+    bool enabled();
+private:
+    bool enabled_ = true;
+};
+class WindowObserver : public Observer
+{
+public:
+    virtual void on_window_termination() = 0;
+    virtual void on_window_resize() = 0;
+};
+class MouseObserver : public Observer
+{
+public:
+    virtual void on_mouse_move(const MouseSnapshot& mouse)    = 0;
+    virtual void on_mouse_press(const MouseSnapshot& mouse)   = 0;
+    virtual void on_mouse_release(const MouseSnapshot& mouse) = 0;
+    virtual void on_mouse_scroll(const MouseSnapshot& mouse)  = 0;
+};
+class KeyboardObserver : public Observer
+{
+public:
+    virtual void on_key_press(const KeyboardSnapshot& keyboard) = 0;
+    virtual void on_char_type(const KeyboardSnapshot& keyboard) = 0;
+};
+// - Returns a non-zero value if there was an issue during initialization.
+//   width and height must be greater than 0
 bool Init(const std::string& name, const Vec2& size);
-
-bool AddWindowTerminationObserver(WindowTerminationObserver* ob);
-bool RemoveWindowTerminationObserver(WindowTerminationObserver* ob);
-bool AddWindowResizeObserver(WindowResizeObserver* ob);
-bool RemoveWindowResizeObserver(WindowResizeObserver* ob);
-
+bool AddWindowObserver(WindowObserver* ob);
+bool RemoveWindowObserver(WindowObserver* ob);
+bool AddMouseObserver(MouseObserver* ob);
+bool RemoveMouseObserver(MouseObserver* ob);
+bool AddKeyboardObserver(KeyboardObserver* ob);
+bool RemoveKeyboardObserver(KeyboardObserver* ob);
 // Returns nullptr before quickdraw::window::Init() is called
 GLFWwindow* GetGLFWWindowHandle();
 void SetWindowIcon(std::filesystem::path file);
-// Returns the time in seconds
+// - Returns the time in seconds
 double Time();
-// Returns the duration of time since the start of the last frame in seconds
+// - Returns the duration of time since the start of the last frame in seconds
 double DeltaTime();
 // - Returns the number of frames since the start of the program so that
-// 0 is returned during the first frame.
-//
+//   0 is returned during the first frame.
 // - A negative number may be returned that the previous frame number is
 // always less than the current
 int FrameNumber();
@@ -222,19 +265,15 @@ bool ShouldClose();
 void Terminate();
 void DrawRect(const Vec2& pos, const Vec2& size);
 void DrawText(const Vec2& pos, const std::string &Text);
-
 // - Works best with high resolution curves.
 // - points.size() cannot be less than 2
 void DrawPath(const std::vector<Vec2>& points, float thickness, const Vec2& offset = Vec2(0));
-
 // - When the image is drawn its pixels are multiplied by the current fill color.
 // - For example, if fill = RGBA(0,0,0,0) the image is invisible,
 //   if fill = RGBA(1,0,1,0.5) the image is half transparent and only the
 //   red and blue channels are visible.
 void DrawTexture(Texture* texture, const Vec2& pos, const Vec2& size);
-
 std::pair<Texture*, Vec2> LoadTexture(std::filesystem::path file);
-
 void EnableScissor(const Vec2& pos, const Vec2& size);
 // Disables the scissor test
 void DisableScissor();
@@ -244,87 +283,23 @@ void SetOutlineColor(const RGBA& color, ShapeLoc loc);
 void SetOutlineColor(const RGBA& color);
 void SetRectRoundedMask(bool mask, ShapeLoc loc);
 void SetRectRoundedMask(bool mask);
-void SetRectCornerSize(float size);
+void SetRectRoundedSize(float size);
 // Sets the thickness of the outline of the rectangle to be drawn
 void SetOutlineThickness(float thickness);
 // Sets the scale of Text. Make sure to set the desired Text scale before
 // calling TextSize(...)
-void SetTextScale(float s);
-
+void SetTextScale(float scale);
+void SetTextSpacing(float spacing);
 // Returns the size of the bounding box of str if it were drawn on the screen.
 // Make sure to set the desired Text scale before calling this method.
 Vec2 TextSize(const std::string& str);
-
-namespace mouse
-{
-class Observer : public AbstractObserver
-{
-
-public:
-    virtual void on_mouse_move() = 0;
-    virtual void on_mouse_press() = 0;
-    virtual void on_mouse_release() = 0;
-    virtual void on_mouse_scroll() = 0;
-};
-
-enum Cursor
-{
-    ARROW = GLFW_ARROW_CURSOR,
-    TEXT = GLFW_IBEAM_CURSOR,
-    CROSS = GLFW_CROSSHAIR_CURSOR,
-    HAND = GLFW_HAND_CURSOR,
-    HRESIZE = GLFW_HRESIZE_CURSOR,
-    VRESIZE = GLFW_VRESIZE_CURSOR
-};
-enum Button
-{
-    LEFT = GLFW_MOUSE_BUTTON_LEFT,
-    RIGHT = GLFW_MOUSE_BUTTON_RIGHT,
-    MIDDLE = GLFW_MOUSE_BUTTON_MIDDLE
-};
-
-bool AddObserver(Observer* ob);
-bool RemoveObserver(Observer* ob);
 void SetCursor(Cursor cursor);
 // Shows/hides the cursor when inside the window
 void SetCursorEnabled(bool flag);
-// Returns whether any of the mouse buttons are down
-bool IsDown();
-// Returns whether any of the mouse buttons are pressed
-bool IsPressed();
-// Returns whether any of the mouse buttons are released
-bool IsReleased();
-bool IsDown(Button b);
-bool IsPressed(Button b);
-bool IsReleased(Button b);
-bool IsMoving();
-// Returns the difference between the current position and the
-// last polled position
-Vec2 Delta();
-// Returns the last polled distance from the top left of the viewport
-Vec2 Pos();
-// Returns -1, 0, or 1
-int ScrollDir();
-
-} // namespace mouse   
-namespace keyboard
-{
-
-class Observer : public AbstractObserver
-{
-
-public:
-    virtual void on_keyboard_press() = 0;
-};
-
-bool AddObserver(Observer* ob);
-bool RemoveObserver(Observer* ob);
-
-int KeyModifiers();
-const std::set<int> &DownKeys();
-} // namespace keyboard
-
+// Returns nullptr if font could not be loaded
+std::unique_ptr<Font> LoadFont(int resolution, std::filesystem::path path);
+// - Must be an underlying pointer returned by LoadFont
+// - Passing nullptr sets the default font to active
+void SetActiveFont(Font* font);
 } // namespace quickdraw
-
-// QUICKDRAW_QUICKDRAW_H_
-#endif
+#endif // QUICKDRAW_QUICKDRAW_H_
