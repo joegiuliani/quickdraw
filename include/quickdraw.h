@@ -20,6 +20,7 @@
 #include <vector>
 #include <filesystem>
 #include <memory>
+#include <functional>
 // FORWARD DECLARATIONS
 namespace quickdraw
 {
@@ -187,6 +188,7 @@ enum MouseButton
     RIGHT = GLFW_MOUSE_BUTTON_RIGHT,
     MIDDLE = GLFW_MOUSE_BUTTON_MIDDLE,
 };
+
 // - Channel type: float
 // - Range: [0,1]
 using RGBA = glm::vec<NUM_PIXEL_CHANNELS, float, glm::packed_highp>;
@@ -215,6 +217,10 @@ struct KeyboardSnapshot
     int typed_char = 0;
     int key_mods = 0;
 };
+struct WindowSnapshot
+{
+    Vec2 viewport_size = Vec2(0);
+};
 class Observer
 {
 public:
@@ -226,16 +232,16 @@ private:
 class WindowObserver : public Observer
 {
 public:
-    virtual void on_window_termination() = 0;
-    virtual void on_window_resize() = 0;
+    virtual void on_window_terminate(const WindowSnapshot&) = 0;
+    virtual void on_window_resize(const WindowSnapshot&) = 0;
 };
 class MouseObserver : public Observer
 {
 public:
-    virtual void on_mouse_move(const MouseSnapshot& mouse) = 0;
-    virtual void on_mouse_press(const MouseSnapshot& mouse) = 0;
-    virtual void on_mouse_release(const MouseSnapshot& mouse) = 0;
-    virtual void on_mouse_scroll(const MouseSnapshot& mouse) = 0;
+    virtual void on_mouse_move(const MouseSnapshot&) = 0;
+    virtual void on_mouse_press(const MouseSnapshot&) = 0;
+    virtual void on_mouse_release(const MouseSnapshot&) = 0;
+    virtual void on_mouse_scroll(const MouseSnapshot&) = 0;
 };
 class KeyboardObserver : public Observer
 {
@@ -347,6 +353,7 @@ void InitCursors();
 void KeyCallback(GLFWwindow* window_ptr, int key, int scancode, int action, int mods);
 MouseSnapshot CopyMouseState();
 KeyboardSnapshot CopyKeyboardState();
+WindowSnapshot CopyWindowState();
 } // namespace detail
 
 #define QUICKDRAW_NOTIFY_OBSERVERS(arg_observer_type, arg_observers, arg_member_function) \
@@ -640,7 +647,7 @@ float curr_text_scale = 24;
 float curr_text_spacing = 3;
 float curr_quad_attribs[ATTRIBS_PER_QUAD];
 RGBA background_color = RGBA(0);
-Vec2 viewport_dim(640, 480);
+Vec2 viewport_size(640, 480);
 double last_time = 0;
 double delta_time = 0;
 int frame_number = 0;
@@ -817,14 +824,14 @@ void GLFWErrorCallback(int error, const char* description)
 }
 void WindowSizeCallback(GLFWwindow* window_ptr, int width, int height)
 {
-    viewport_dim = Vec2(width, height);
+    viewport_size = Vec2(width, height);
     glViewport(0, 0, width, height);
 
     glUseProgram(shader_handle);
-    Vec2 transform = Vec2(1.0f / (viewport_dim - 1.0f));
+    Vec2 transform = Vec2(1.0f / (viewport_size - 1.0f));
     glUniform2fv(transform_handle, 1, &transform[0]);
 
-    QUICKDRAW_NOTIFY_OBSERVERS(WindowObserver, window_observers, on_window_resize());
+    QUICKDRAW_NOTIFY_OBSERVERS(WindowObserver, window_observers, on_window_resize(CopyWindowState()));
 }
 void MouseButtonCallback(GLFWwindow* window_ptr, int button, int action, int mods)
 {
@@ -920,6 +927,11 @@ KeyboardSnapshot CopyKeyboardState()
     keyboard.pressed_keys = pressed_keys.current;
     return keyboard;
 }
+WindowSnapshot CopyWindowState()
+{
+    WindowSnapshot window;
+    window.viewport_size = viewport_size;
+};
 void SetQuadMode(QuadMode mode)
 {
     curr_quad_attribs[4] = mode;
@@ -1162,7 +1174,7 @@ bool Init(const std::string& name, const Vec2& size)
         return false;
     }
 
-    viewport_dim = size;
+    viewport_size = size;
 
     glfwSetErrorCallback(GLFWErrorCallback);
     if (!glfwInit())
@@ -1176,7 +1188,7 @@ bool Init(const std::string& name, const Vec2& size)
     glfwWindowHint(GLFW_SAMPLES, 16);
     glfwWindowHint(GLFW_DECORATED, true);
 
-    glfw_window_handle = glfwCreateWindow((int)viewport_dim.x, (int)viewport_dim.y, name.c_str(), NULL, NULL);
+    glfw_window_handle = glfwCreateWindow((int)viewport_size.x, (int)viewport_size.y, name.c_str(), NULL, NULL);
     if (glfw_window_handle == NULL)
     {
         std::cout << "quickdraw::window Failed to create GLFW window\n";
@@ -1193,7 +1205,7 @@ bool Init(const std::string& name, const Vec2& size)
     default_font = (Font*)LoadFont(48, "C:\\Windows\\Fonts\\segoeuil.ttf");
     SetActiveFont(default_font);
 
-    WindowSizeCallback(glfw_window_handle, (int)viewport_dim.x, (int)viewport_dim.y);
+    WindowSizeCallback(glfw_window_handle, (int)viewport_size.x, (int)viewport_size.y);
     last_time = glfwGetTime();
 
     return true;
@@ -1288,6 +1300,7 @@ void Terminate()
 {
     using namespace detail;
     glfwTerminate();
+    QUICKDRAW_NOTIFY_OBSERVERS(WindowObserver, window_observers, on_window_terminate(CopyWindowState()));
 }
 void SetBackgroundColor(const RGBA& color)
 {
@@ -1325,7 +1338,7 @@ double DeltaTime()
 Vec2 ViewportSize()
 {
     using namespace detail;
-    return viewport_dim;
+    return viewport_size;
 }
 int FrameNumber()
 {
@@ -1618,7 +1631,7 @@ void EnableScissor(const Vec2& pos, const Vec2& size)
 {
     using namespace detail;
     glEnable(GL_SCISSOR_TEST);
-    glScissor((GLint)pos.x, (GLint)(viewport_dim.y - pos.y - size.y), (GLint)size.x, (GLint)size.y);
+    glScissor((GLint)pos.x, (GLint)(viewport_size.y - pos.y - size.y), (GLint)size.x, (GLint)size.y);
 }
 void DisableScissor()
 {
