@@ -22,25 +22,6 @@
 #include <memory>
 #include <functional>
 
-#ifdef QUICKDRAW_DEFINE_VEC2_INEQUALITY_OPERATORS
-bool operator<(const Vec2& lhs, const Vec2& rhs)
-{
-    return lhs.x < rhs.x && lhs.y < rhs.y;
-}
-bool operator>(const Vec2& lhs, const Vec2& rhs)
-{
-    return lhs.x > rhs.x && lhs.y > rhs.y;
-}
-bool operator<=(const Vec2& lhs, const Vec2& rhs)
-{
-    return lhs.x <= rhs.x && lhs.y <= rhs.y;
-}
-bool operator>=(const Vec2& lhs, const Vec2& rhs)
-{
-    return lhs.x >= rhs.x && lhs.y >= rhs.y;
-}
-#endif
-
 // FORWARD DECLARATIONS
 namespace quickdraw
 {
@@ -1729,3 +1710,22 @@ FontHandle LoadFont(int resolution, std::filesystem::path path)
 }
 
 }
+
+#ifndef QUICKDRAW_DISBALE_VEC2_INEQUALITY_OPERATORS
+bool operator<(const quickdraw::Vec2& lhs, const quickdraw::Vec2& rhs)
+{
+    return lhs.x < rhs.x && lhs.y < rhs.y;
+}
+bool operator>(const quickdraw::Vec2& lhs, const quickdraw::Vec2& rhs)
+{
+    return lhs.x > rhs.x && lhs.y > rhs.y;
+}
+bool operator<=(const quickdraw::Vec2& lhs, const quickdraw::Vec2& rhs)
+{
+    return lhs.x <= rhs.x && lhs.y <= rhs.y;
+}
+bool operator>=(const quickdraw::Vec2& lhs, const quickdraw::Vec2& rhs)
+{
+    return lhs.x >= rhs.x && lhs.y >= rhs.y;
+}
+#endif
