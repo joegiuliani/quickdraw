@@ -795,18 +795,15 @@ void KeyCallback(GLFWwindow* window_ptr, int key, int scancode, int action, int 
         return;
 
     std::set<int> new_keys = pressed_keys.current;
-
     if (action == GLFW_PRESS)
     {
         new_keys.insert(key);
     }
-
     else if (action == GLFW_RELEASE)
     {
         new_keys.erase(key);
     }
     pressed_keys.new_state(new_keys);
-
     if (pressed_keys.current.size() > pressed_keys.previous.size())
     {
         KeyboardSnapshot ks = CopyKeyboardState();
@@ -858,6 +855,7 @@ void CursorCallback(GLFWwindow* window_ptr, double x, double y)
     double mx, my;
     glfwGetCursorPos(window_ptr, &mx, &my);
     mouse_pos_state.current = Vec2(mx, my);
+    mouse_delta = mouse_pos_state.current - mouse_pos_state.previous;
     MouseSnapshot ms = CopyMouseState();
     QUICKDRAW_NOTIFY_OBSERVERS(MouseObserver, mouse_observers, on_mouse_move(ms));
     cursor_update_received = true;
