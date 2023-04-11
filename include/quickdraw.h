@@ -320,6 +320,8 @@ FontHandle LoadFont(int resolution, std::filesystem::path path);
 void SetActiveFont(FontHandle font);
 bool operator<(const Vec2& lhs, const Vec2& rhs);
 bool operator>(const Vec2& lhs, const Vec2& rhs);
+bool operator<=(const Vec2& lhs, const Vec2& rhs);
+bool operator>=(const Vec2& lhs, const Vec2& rhs);
 namespace detail
 {
 enum QuadMode
@@ -1716,5 +1718,13 @@ bool operator<(const Vec2& lhs, const Vec2& rhs)
 bool operator>(const Vec2& lhs, const Vec2& rhs)
 {
     return lhs.x > rhs.x && lhs.y > rhs.y;
+}
+bool operator<=(const Vec2& lhs, const Vec2& rhs)
+{
+    return lhs.x <= rhs.x && lhs.y <= rhs.y;
+}
+bool operator>=(const Vec2& lhs, const Vec2& rhs)
+{
+    return lhs.x >= rhs.x && lhs.y >= rhs.y;
 }
 }
