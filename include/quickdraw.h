@@ -21,6 +21,26 @@
 #include <filesystem>
 #include <memory>
 #include <functional>
+
+#ifdef QUICKDRAW_DEFINE_VEC2_INEQUALITY_OPERATORS
+bool operator<(const Vec2& lhs, const Vec2& rhs)
+{
+    return lhs.x < rhs.x && lhs.y < rhs.y;
+}
+bool operator>(const Vec2& lhs, const Vec2& rhs)
+{
+    return lhs.x > rhs.x && lhs.y > rhs.y;
+}
+bool operator<=(const Vec2& lhs, const Vec2& rhs)
+{
+    return lhs.x <= rhs.x && lhs.y <= rhs.y;
+}
+bool operator>=(const Vec2& lhs, const Vec2& rhs)
+{
+    return lhs.x >= rhs.x && lhs.y >= rhs.y;
+}
+#endif
+
 // FORWARD DECLARATIONS
 namespace quickdraw
 {
@@ -318,10 +338,6 @@ FontHandle LoadFont(int resolution, std::filesystem::path path);
 // - Must be an underlying pointer returned by LoadFont
 // - Passing nullptr sets the default font to active
 void SetActiveFont(FontHandle font);
-bool operator<(const Vec2& lhs, const Vec2& rhs);
-bool operator>(const Vec2& lhs, const Vec2& rhs);
-bool operator<=(const Vec2& lhs, const Vec2& rhs);
-bool operator>=(const Vec2& lhs, const Vec2& rhs);
 namespace detail
 {
 enum QuadMode
@@ -1711,20 +1727,5 @@ FontHandle LoadFont(int resolution, std::filesystem::path path)
     }
     return &new_font;
 }
-bool operator<(const Vec2& lhs, const Vec2& rhs)
-{
-    return lhs.x < rhs.x && lhs.y < rhs.y;
-}
-bool operator>(const Vec2& lhs, const Vec2& rhs)
-{
-    return lhs.x > rhs.x && lhs.y > rhs.y;
-}
-bool operator<=(const Vec2& lhs, const Vec2& rhs)
-{
-    return lhs.x <= rhs.x && lhs.y <= rhs.y;
-}
-bool operator>=(const Vec2& lhs, const Vec2& rhs)
-{
-    return lhs.x >= rhs.x && lhs.y >= rhs.y;
-}
+
 }
