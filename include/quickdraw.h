@@ -931,6 +931,7 @@ WindowSnapshot CopyWindowState()
 {
     WindowSnapshot window;
     window.viewport_size = viewport_size;
+    return window;
 };
 void SetQuadMode(QuadMode mode)
 {
