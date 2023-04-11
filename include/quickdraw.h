@@ -600,15 +600,26 @@ private:
     float space_character_width_ = 0;
 };
 template<typename T>
-struct BinaryStateSaver
+class BinaryStateSaver
 {
-    T current;
-    T previous;
+
+public:
     void new_state(T state)
     {
-        previous = current;
-        current = state;
+        previous_ = current_;
+        current_ = state;
     }
+    T previous() const
+    {
+        return previous_;
+    }
+    T current() const
+    {
+        return current_;
+    }
+private:
+    T current_;
+    T previous_;
 };
 struct DynamicVertexAttribs
 {
@@ -758,7 +769,8 @@ void InitMouse()
 {
     for (auto& st : mouse_button_states)
     {
-        st.current = st.previous = UP;
+        st.new_state(UP);
+        st.new_state(UP);
     }
 
     for (int k = ARROW; k <= VRESIZE; k++)
@@ -794,7 +806,7 @@ void KeyCallback(GLFWwindow* window_ptr, int key, int scancode, int action, int 
     if (key >= KEY_LEFT_SHIFT && key <= KEY_RIGHT_SUPER)
         return;
 
-    std::set<int> new_keys = pressed_keys.current;
+    std::set<int> new_keys = pressed_keys.current();
     if (action == GLFW_PRESS)
     {
         new_keys.insert(key);
@@ -804,7 +816,7 @@ void KeyCallback(GLFWwindow* window_ptr, int key, int scancode, int action, int 
         new_keys.erase(key);
     }
     pressed_keys.new_state(new_keys);
-    if (pressed_keys.current.size() > pressed_keys.previous.size())
+    if (pressed_keys.current().size() > pressed_keys.previous().size())
     {
         KeyboardSnapshot ks = CopyKeyboardState();
         QUICKDRAW_NOTIFY_OBSERVERS(KeyboardObserver, keyboard_observers, on_key_press(ks));
@@ -836,9 +848,9 @@ void MouseButtonCallback(GLFWwindow* window_ptr, int button, int action, int mod
     key_mods = mods;
 
     MouseSnapshot mouse_snapshot = CopyMouseState();
-    if (mouse_button_states[MouseButton(button)].current != mouse_button_states[MouseButton(button)].previous)
+    if (mouse_button_states[MouseButton(button)].current() != mouse_button_states[MouseButton(button)].previous())
     {
-        if (mouse_button_states[MouseButton(button)].current == DOWN)
+        if (mouse_button_states[MouseButton(button)].current() == DOWN)
         {
             QUICKDRAW_NOTIFY_OBSERVERS(MouseObserver, mouse_observers, on_mouse_press(mouse_snapshot));
         }
@@ -854,8 +866,8 @@ void CursorCallback(GLFWwindow* window_ptr, double x, double y)
 {
     double mx, my;
     glfwGetCursorPos(window_ptr, &mx, &my);
-    mouse_pos_state.current = Vec2(mx, my);
-    mouse_delta = mouse_pos_state.current - mouse_pos_state.previous;
+    mouse_pos_state.new_state(Vec2(mx, my));
+    mouse_delta = mouse_pos_state.current() - mouse_pos_state.previous();
     MouseSnapshot ms = CopyMouseState();
     QUICKDRAW_NOTIFY_OBSERVERS(MouseObserver, mouse_observers, on_mouse_move(ms));
     cursor_update_received = true;
@@ -870,7 +882,7 @@ void ScrollCallback(GLFWwindow* window_ptr, double xoffset, double yoffset)
 void ProcessMouseEvents()
 {
     // Make sure to set scroll state to 0 if we aren't scrolling
-    if (!scroll_update_received && mouse_scroll_state.current != 0)
+    if (!scroll_update_received && mouse_scroll_state.current() != 0)
     {
         ScrollCallback(glfw_window_handle, 0, 0);
     }
@@ -885,8 +897,8 @@ void ProcessMouseEvents()
     {
         for (auto& bs : mouse_button_states)
         {
-            if (bs.current != bs.previous)
-                bs.new_state(bs.current);
+            if (bs.current() != bs.previous())
+                bs.new_state(bs.current());
         }
     }
     scroll_update_received = false;
@@ -899,20 +911,20 @@ MouseSnapshot CopyMouseState()
 
     for (int b = 0; b < NUM_MOUSE_BUTTONS; b++)
     {
-        mouse.is_down[b] = mouse_button_states[b].current == DOWN;
+        mouse.is_down[b] = mouse_button_states[b].current() == DOWN;
     }
     for (int b = 0; b < NUM_MOUSE_BUTTONS; b++)
     {
-        mouse.is_pressed[b] = mouse_button_states[b].current == DOWN && mouse_button_states[b].previous == UP;
+        mouse.is_pressed[b] = mouse_button_states[b].current() == DOWN && mouse_button_states[b].previous() == UP;
     }
     for (int b = 0; b < NUM_MOUSE_BUTTONS; b++)
     {
-        mouse.is_down[b] = mouse_button_states[b].current == UP && mouse_button_states[b].previous == DOWN;
+        mouse.is_down[b] = mouse_button_states[b].current() == UP && mouse_button_states[b].previous() == DOWN;
     }
     mouse.is_moving = mouse_delta != Vec2(0);
     mouse.delta = mouse_delta;
-    mouse.pos = mouse_pos_state.current;
-    mouse.scroll = mouse_scroll_state.current;
+    mouse.pos = mouse_pos_state.current();
+    mouse.scroll = mouse_scroll_state.current();
     mouse.key_mods = key_mods;
 
     return mouse;
@@ -922,7 +934,7 @@ KeyboardSnapshot CopyKeyboardState()
     KeyboardSnapshot keyboard;
     keyboard.key_mods = key_mods;
     keyboard.typed_char = typed_char;
-    keyboard.pressed_keys = pressed_keys.current;
+    keyboard.pressed_keys = pressed_keys.current();
     return keyboard;
 }
 WindowSnapshot CopyWindowState()
