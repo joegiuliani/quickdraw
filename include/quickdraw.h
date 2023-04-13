@@ -280,6 +280,8 @@ void DrawFrame();
 bool ShouldClose();
 void Terminate();
 void DrawRect(const Vec2& pos, const Vec2& size);
+// - Set scale with SetTextScale
+// - Set spacing with SetTextSpacing
 void DrawText(const Vec2& pos, const std::string& Text);
 // - Works best with high resolution curves.
 // - points.size() cannot be less than 2
@@ -306,7 +308,6 @@ void SetOutlineThickness(float thickness);
 // - Sets the scale of Text. Make sure to set the desired Text scale before
 //   calling TextSize(...)
 void SetTextScale(float scale);
-void SetTextSpacing(float spacing);
 // - Returns the size of the bounding box of str if it were drawn on the screen.
 // - Make sure to set the desired Text scale before calling this method.
 Vec2 TextSize(const std::string& str);
@@ -657,7 +658,6 @@ std::vector<float> quads_attribs_to_draw;
 DynamicVertexAttribs curr_vertex_attribs[VERTS_PER_QUAD];
 size_t most_quads_drawn = 0;
 float curr_text_scale = 24;
-float curr_text_spacing = 3;
 float curr_quad_attribs[ATTRIBS_PER_QUAD];
 RGBA background_color = RGBA(0);
 Vec2 viewport_size(640, 480);
@@ -984,31 +984,6 @@ void DrawQuad()
 
     for (float& attrib : curr_quad_attribs)
         quads_attribs_to_draw.emplace_back(attrib);
-}
-float GetTextWidth(const std::string& text)
-{
-    float ret = 0;
-    for (const char& c : text)
-    {
-        if (c == ' ')
-        {
-            ret += active_font->space_character_width();
-        }
-        else if (!Font::IsDisplayableChar(c))
-        {
-            std::cout << "quickdraw::GetTextWidth Failed to get text width because 'text' argument has a character with no width\n";
-            return 0;
-        }
-        else
-        {
-            ret += active_font->get(c)->advance + curr_text_spacing;
-        }
-    }
-    return ret * curr_text_scale;
-}
-float GetTextHeight()
-{
-    return curr_text_scale * active_font->font_height();
 }
 Vec2 Normal(const Vec2& slope)
 {
@@ -1400,7 +1375,7 @@ void DrawText(const Vec2& pos, const std::string& text)
     {
         saved_vertex_attribs[k] = curr_vertex_attribs[k];
     }
-    float text_width = GetTextWidth(text);
+    float text_width = TextSize(text).x;
     float curs = 0;
     for (char c : text)
     {
@@ -1428,7 +1403,7 @@ void DrawText(const Vec2& pos, const std::string& text)
 
         // Advance the horizontal cursor to the drawing position of the next
         // character
-        curs += glyph.advance * curr_text_scale + curr_text_spacing;
+        curs += glyph.advance * curr_text_scale;
     }
 
     for (int k = 0; k < 4; k++)
@@ -1631,17 +1606,32 @@ void SetRectRoundedSize(float size)
 Vec2 TextSize(const std::string& str)
 {
     using namespace detail;
-    return Vec2(GetTextWidth(str), GetTextHeight());
+    if (str.length() == 0)
+        return Vec2(0);
+
+    float width = 0;
+    for (const char& c : str)
+    {
+        if (c == ' ')
+        {
+            width += active_font->space_character_width();
+        }
+        else if (!Font::IsDisplayableChar(c))
+        {
+            std::cout << "quickdraw::TextSize Failed to get text width because 'text' argument has a character with no width\n";
+            return Vec2(0);
+        }
+        else
+        {
+            width += active_font->get(c)->advance;
+        }
+    }
+    return curr_text_scale * Vec2(width, active_font->font_height());
 }
 void SetTextScale(float s)
 {
     using namespace detail;
     curr_text_scale = s;
-}
-void SetTextSpacing(float spacing)
-{
-    using namespace detail;
-    curr_text_spacing = spacing;
 }
 void EnableScissor(const Vec2& pos, const Vec2& size)
 {
