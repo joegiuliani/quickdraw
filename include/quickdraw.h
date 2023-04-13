@@ -212,9 +212,22 @@ struct MouseSnapshot
     bool any_pressed();
     bool any_released();
 };
+/*
+    Snapshots are used to send Mouse and Keyboard data to observers.
+    The point of sending Mouse and Keyboard states through callback functions
+    instead of providing a randomly accessable getter is to discourage the use
+    of mouse and keyboard states during the drawing stage when those states 
+    are inaccurate.
+
+    The client will probably still end up creating saved keyboard and mouse
+    states, but they will then be clearly aware of the limitations.
+*/
+
 struct KeyboardSnapshot
 {
-    std::set<int> pressed_keys;
+    std::set<int> down_keys;
+    int pressed_key = KEY_UNKNOWN;
+    int released_key = KEY_UNKNOWN;
     unsigned char typed_char = 0;
     int key_mods = 0;
 };
@@ -248,6 +261,7 @@ class KeyboardObserver : public Observer
 {
 public:
     virtual void on_key_press(const KeyboardSnapshot& keyboard) = 0;
+    virtual void on_key_release(const KeyboardSnapshot& keyboard) = 0;
     virtual void on_char_type(const KeyboardSnapshot& keyboard) = 0;
 };
 // - Returns a non-zero value if there was an issue during initialization.
@@ -668,7 +682,9 @@ BinaryStateSaver<Vec2> mouse_pos_state;
 BinaryStateSaver<int> mouse_button_states[NUM_MOUSE_BUTTONS];
 BinaryStateSaver<int> mouse_scroll_state;
 Vec2 mouse_delta;
-BinaryStateSaver<std::set<int>> pressed_keys;
+std::set<int> down_keys;
+int curr_key_pressed = KEY_UNKNOWN;
+int curr_key_released = KEY_UNKNOWN;
 int key_mods = 0;
 unsigned char typed_char = 0;
 bool atlas_updated = false;
@@ -806,20 +822,25 @@ void KeyCallback(GLFWwindow* window_ptr, int key, int scancode, int action, int 
     if (key >= KEY_LEFT_SHIFT && key <= KEY_RIGHT_SUPER)
         return;
 
-    std::set<int> new_keys = pressed_keys.current();
+    curr_key_pressed = KEY_UNKNOWN;
+    curr_key_released = KEY_UNKNOWN;
     if (action == GLFW_PRESS)
     {
-        new_keys.insert(key);
+        if (down_keys.insert(key).second)
+        {
+            curr_key_pressed = key;
+            KeyboardSnapshot ks = CopyKeyboardState();
+            QUICKDRAW_NOTIFY_OBSERVERS(KeyboardObserver, keyboard_observers, on_key_press(ks));
+        }
     }
     else if (action == GLFW_RELEASE)
     {
-        new_keys.erase(key);
-    }
-    pressed_keys.new_state(new_keys);
-    if (pressed_keys.current().size() > pressed_keys.previous().size())
-    {
-        KeyboardSnapshot ks = CopyKeyboardState();
-        QUICKDRAW_NOTIFY_OBSERVERS(KeyboardObserver, keyboard_observers, on_key_press(ks));
+        if (down_keys.erase(key))
+        {
+            curr_key_released = key;
+            KeyboardSnapshot ks = CopyKeyboardState();
+            QUICKDRAW_NOTIFY_OBSERVERS(KeyboardObserver, keyboard_observers, on_key_release(ks));
+        }
     }
 }
 void CharCallback(GLFWwindow* window, unsigned int codepoint)
@@ -935,7 +956,9 @@ KeyboardSnapshot CopyKeyboardState()
     KeyboardSnapshot keyboard;
     keyboard.key_mods = key_mods;
     keyboard.typed_char = typed_char;
-    keyboard.pressed_keys = pressed_keys.current();
+    keyboard.down_keys = down_keys;
+    keyboard.pressed_key = curr_key_pressed;
+    keyboard.released_key = curr_key_released;
     return keyboard;
 }
 WindowSnapshot CopyWindowState()
@@ -1384,7 +1407,7 @@ void DrawText(const Vec2& pos, const std::string& text)
             return;
         }
         Glyph& glyph = *active_font->get(c);
-        Vec2 glyph_draw_pos = pos + curr_text_scale * Vec2(x_cursor + glyph.bearing.x, glyph.bearing.y);//active_font->max_text_height() * 0.5f - glyph.bearing.y);
+        Vec2 glyph_draw_pos = pos + curr_text_scale * Vec2(x_cursor + glyph.bearing.x, -glyph.bearing.y);
         Vec2 glyph_draw_size = curr_text_scale * glyph.size;
         curr_vertex_attribs[UPPER_START].fill_color = glm::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, (glyph_draw_pos.x - pos.x) / text_width);
         curr_vertex_attribs[UPPER_END].fill_color = glm::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, (glyph_draw_pos.x + glyph_draw_size.x - pos.x) / text_width);
