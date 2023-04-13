@@ -305,12 +305,14 @@ void SetRectRoundedMask(bool mask);
 void SetRectRoundedSize(float size);
 // Sets the thickness of the outline of the rectangle to be drawn
 void SetOutlineThickness(float thickness);
-// - Sets the scale of Text. Make sure to set the desired Text scale before
-//   calling TextSize(...)
+// - Sets the scale of Text. Make sure to set the desired text scale before
+//   calling TextSize(...) or MaxTextHeight()
 void SetTextScale(float scale);
 // - Returns the size of the bounding box of str if it were drawn on the screen.
-// - Make sure to set the desired Text scale before calling this method.
+// - Make sure to set the desired text scale before calling this method.
 Vec2 TextSize(const std::string& str);
+// - Make sure to set the desired text scale before calling this method.
+float MaxTextHeight();
 void SetCursor(Cursor cursor);
 // - Shows/hides the cursor when inside the window
 void SetCursorEnabled(bool flag);
@@ -580,17 +582,13 @@ public:
     {
         return ready_to_use_;
     }
-    float font_offset()
+    float max_text_height()
     {
-        return font_offset_;
+        return max_text_height_;
     }
-    float font_height()
+    float space_glyph_width()
     {
-        return font_height_;
-    }
-    float space_character_width()
-    {
-        return space_character_width_;
+        return space_glyph_width_;
     }
 private:
     static constexpr unsigned char FIRST_VALID_CHAR = 33;
@@ -598,9 +596,8 @@ private:
     static constexpr int NUM_VALID_CHARS = 1 + LAST_VALID_CHAR - FIRST_VALID_CHAR;
     detail::Glyph glyphs_[NUM_VALID_CHARS];
     bool ready_to_use_ = false;
-    float font_offset_ = 0;
-    float font_height_ = 0;
-    float space_character_width_ = 0;
+    float max_text_height_ = 0;
+    float space_glyph_width_ = 0;
 };
 template<typename T>
 class BinaryStateSaver
@@ -1089,7 +1086,8 @@ Font::Font(int resolution, std::filesystem::path path)
     int min_atlas_area = 0;
     // width / rows
     float avg_glyph_aspect_ratio = 0;
-
+    float max_dist_above_baseline = 0;
+    float max_dist_below_baseline = 0;
     // Load displayable characters
     float ADVANCE_FAC = 1.0f / float(1 << 6);
     for (int k = 0; k < NUM_VALID_CHARS; k++)
@@ -1100,14 +1098,15 @@ Font::Font(int resolution, std::filesystem::path path)
             std::cout << "quickdraw::FontAtlas::FontAtlas Failed to load \'" << (char)(k + FIRST_VALID_CHAR) << "\'\n";
             return;
         }
-        min_atlas_area += face->glyph->bitmap.width * face->glyph->bitmap.rows;
-        avg_glyph_aspect_ratio += float(face->glyph->bitmap.width) / face->glyph->bitmap.rows;
-        space_character_width_ += face->glyph->bitmap.width; // is the average of displayable character widths
-
         // Note we set up the glyph uv's later.
         glyph.size = Vec2(face->glyph->bitmap.width, face->glyph->bitmap.rows);
         glyph.bearing = Vec2(face->glyph->bitmap_left, face->glyph->bitmap_top);
         glyph.advance = face->glyph->advance.x * ADVANCE_FAC; // If text quads are positioned incorrectly its probably this
+        min_atlas_area += glyph.size.x * glyph.size.y;
+        avg_glyph_aspect_ratio += glyph.size.x / glyph.size.y;
+        space_glyph_width_ += glyph.size.x; // will be average of displayable character widths
+        max_dist_above_baseline = std::max(max_dist_above_baseline, glyph.bearing.y);
+        max_dist_below_baseline = std::max(max_dist_below_baseline, glyph.size.y - glyph.bearing.y);
 
         std::vector<GLubyte> bitmap(glyph.size.x * NUM_PIXEL_CHANNELS * glyph.size.y);
         for (int x = 0; x < glyph.size.x; x++)
@@ -1128,8 +1127,12 @@ Font::Font(int resolution, std::filesystem::path path)
             return;
         }
     }
-    space_character_width_ /= NUM_VALID_CHARS; // is the average of displayable character widths
 
+    // Set fields
+    space_glyph_width_ /= NUM_VALID_CHARS; // is the average of displayable character widths
+    max_text_height_ = max_dist_above_baseline + max_dist_below_baseline;
+
+    // Apply import scale
     float font_import_scale = 1.0f / resolution;
     for (Glyph& g : glyphs_)
     {
@@ -1137,22 +1140,12 @@ Font::Font(int resolution, std::filesystem::path path)
         g.bearing *= font_import_scale;
         g.advance *= font_import_scale;
     }
-    space_character_width_ *= font_import_scale;
+    space_glyph_width_ *= font_import_scale;
+    max_text_height_ *= font_import_scale;
 
-    float max_height = 0;
-    for (const auto& g : glyphs_)
-    {
-        if (g.size.y > max_height)
-        {
-            max_height = g.bearing.y;
-        }
-    }
-    font_height_ = max_height;
-    font_offset_ = max_height * 0.5f;
-
+    // Cleanup
     FT_Done_Face(face);
     FT_Done_FreeType(ft);
-
     ready_to_use_ = true;
 }
 } // namespace detail
@@ -1376,14 +1369,14 @@ void DrawText(const Vec2& pos, const std::string& text)
         saved_vertex_attribs[k] = curr_vertex_attribs[k];
     }
     float text_width = TextSize(text).x;
-    float curs = 0;
+    float x_cursor = 0;
     for (char c : text)
     {
         if (!Font::IsDisplayableChar(c))
         {
             if (c == ' ')
             {
-                curs += active_font->space_character_width() * curr_text_scale;
+                x_cursor += active_font->space_glyph_width();
                 continue;
             }
 
@@ -1391,19 +1384,17 @@ void DrawText(const Vec2& pos, const std::string& text)
             return;
         }
         Glyph& glyph = *active_font->get(c);
-        float offset = (active_font->font_height() - glyph.bearing.y - active_font->font_offset()) * curr_text_scale;
-
-        Vec2 draw_pos = Vec2(pos.x + glyph.bearing.x * curr_text_scale + curs, pos.y + offset);
-        Vec2 draw_size = glyph.size * curr_text_scale;
-        curr_vertex_attribs[UPPER_START].fill_color = glm::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, (draw_pos.x - pos.x) / text_width);
-        curr_vertex_attribs[UPPER_END].fill_color = glm::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, (draw_pos.x + draw_size.x - pos.x) / text_width);
-        curr_vertex_attribs[LOWER_START].fill_color = glm::mix(saved_vertex_attribs[LOWER_START].fill_color, saved_vertex_attribs[LOWER_END].fill_color, (draw_pos.x - pos.x) / text_width);
-        curr_vertex_attribs[LOWER_END].fill_color = glm::mix(saved_vertex_attribs[LOWER_START].fill_color, saved_vertex_attribs[LOWER_END].fill_color, (draw_pos.x + draw_size.x - pos.x) / text_width);
-        DrawTexture(glyph.texture, draw_pos, draw_size);
+        Vec2 glyph_draw_pos = pos + curr_text_scale * Vec2(x_cursor + glyph.bearing.x, glyph.bearing.y);//active_font->max_text_height() * 0.5f - glyph.bearing.y);
+        Vec2 glyph_draw_size = curr_text_scale * glyph.size;
+        curr_vertex_attribs[UPPER_START].fill_color = glm::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, (glyph_draw_pos.x - pos.x) / text_width);
+        curr_vertex_attribs[UPPER_END].fill_color = glm::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, (glyph_draw_pos.x + glyph_draw_size.x - pos.x) / text_width);
+        curr_vertex_attribs[LOWER_START].fill_color = glm::mix(saved_vertex_attribs[LOWER_START].fill_color, saved_vertex_attribs[LOWER_END].fill_color, (glyph_draw_pos.x - pos.x) / text_width);
+        curr_vertex_attribs[LOWER_END].fill_color = glm::mix(saved_vertex_attribs[LOWER_START].fill_color, saved_vertex_attribs[LOWER_END].fill_color, (glyph_draw_pos.x + glyph_draw_size.x - pos.x) / text_width);
+        DrawTexture(glyph.texture, glyph_draw_pos, glyph_draw_size);
 
         // Advance the horizontal cursor to the drawing position of the next
         // character
-        curs += glyph.advance * curr_text_scale;
+        x_cursor += glyph.advance;
     }
 
     for (int k = 0; k < 4; k++)
@@ -1614,7 +1605,7 @@ Vec2 TextSize(const std::string& str)
     {
         if (c == ' ')
         {
-            width += active_font->space_character_width();
+            width += active_font->space_glyph_width();
         }
         else if (!Font::IsDisplayableChar(c))
         {
@@ -1626,7 +1617,12 @@ Vec2 TextSize(const std::string& str)
             width += active_font->get(c)->advance;
         }
     }
-    return curr_text_scale * Vec2(width, active_font->font_height());
+    return curr_text_scale * Vec2(width, active_font->max_text_height());
+}
+float MaxTextHeight()
+{
+    using namespace detail;
+    return active_font->max_text_height() * curr_text_scale;
 }
 void SetTextScale(float s)
 {
@@ -1692,7 +1688,6 @@ void SetActiveFont(FontHandle font)
     else
         active_font = (Font*)font;
 }
-
 FontHandle LoadFont(int resolution, std::filesystem::path path)
 {
     using namespace detail;
@@ -1703,7 +1698,6 @@ FontHandle LoadFont(int resolution, std::filesystem::path path)
     }
     return &new_font;
 }
-
 }
 
 #ifndef QUICKDRAW_DISBALE_VEC2_INEQUALITY_OPERATORS
