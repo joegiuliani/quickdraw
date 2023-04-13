@@ -215,7 +215,7 @@ struct MouseSnapshot
 struct KeyboardSnapshot
 {
     std::set<int> pressed_keys;
-    int typed_char = 0;
+    unsigned char typed_char = 0;
     int key_mods = 0;
 };
 struct WindowSnapshot
