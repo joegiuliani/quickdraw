@@ -846,7 +846,7 @@ void KeyCallback(GLFWwindow* window_ptr, int key, int scancode, int action, int 
             QUICKDRAW_NOTIFY_OBSERVERS(KeyboardObserver, keyboard_observers, on_key_release(ks));
         }
     }
-    else if (mods == GLFW_REPEAT)
+    else if (action == GLFW_REPEAT)
     {
         curr_key_held = key;
         KeyboardSnapshot ks = CopyKeyboardState();
