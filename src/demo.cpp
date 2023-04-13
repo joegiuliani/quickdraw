@@ -12,7 +12,6 @@ int main()
 	SetOutlineThickness(3);
 	SetRectRoundedSize(10);
 	SetRectRoundedMask(1);
-	SetTextSpacing(0.001);
 	while (!ShouldClose())
 	{
 		SetTextScale(24 + sinf(Time())*10);
