@@ -228,6 +228,7 @@ struct KeyboardSnapshot
     std::set<int> down_keys;
     int pressed_key = KEY_UNKNOWN;
     int released_key = KEY_UNKNOWN;
+    int held_key = KEY_UNKNOWN;
     unsigned char typed_char = 0;
     int key_mods = 0;
 };
@@ -260,6 +261,7 @@ public:
 class KeyboardObserver : public Observer
 {
 public:
+    virtual void on_key_hold(const KeyboardSnapshot& keyboard) = 0;
     virtual void on_key_press(const KeyboardSnapshot& keyboard) = 0;
     virtual void on_key_release(const KeyboardSnapshot& keyboard) = 0;
     virtual void on_char_type(const KeyboardSnapshot& keyboard) = 0;
@@ -685,6 +687,7 @@ Vec2 mouse_delta;
 std::set<int> down_keys;
 int curr_key_pressed = KEY_UNKNOWN;
 int curr_key_released = KEY_UNKNOWN;
+int curr_key_held = KEY_UNKNOWN;
 int key_mods = 0;
 unsigned char typed_char = 0;
 bool atlas_updated = false;
@@ -824,6 +827,7 @@ void KeyCallback(GLFWwindow* window_ptr, int key, int scancode, int action, int 
 
     curr_key_pressed = KEY_UNKNOWN;
     curr_key_released = KEY_UNKNOWN;
+    curr_key_held = KEY_UNKNOWN;
     if (action == GLFW_PRESS)
     {
         if (down_keys.insert(key).second)
@@ -841,6 +845,12 @@ void KeyCallback(GLFWwindow* window_ptr, int key, int scancode, int action, int 
             KeyboardSnapshot ks = CopyKeyboardState();
             QUICKDRAW_NOTIFY_OBSERVERS(KeyboardObserver, keyboard_observers, on_key_release(ks));
         }
+    }
+    else if (mods == GLFW_REPEAT)
+    {
+        curr_key_held = key;
+        KeyboardSnapshot ks = CopyKeyboardState();
+        QUICKDRAW_NOTIFY_OBSERVERS(KeyboardObserver, keyboard_observers, on_key_hold(ks));
     }
 }
 void CharCallback(GLFWwindow* window, unsigned int codepoint)
