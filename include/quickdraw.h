@@ -791,6 +791,7 @@ void InitMouse()
 void InitKeyboard()
 {
     glfwSetKeyCallback(glfw_window_handle, KeyCallback);
+    glfwSetCharCallback(glfw_window_handle, CharCallback);
 }
 void InitCursors()
 {
@@ -823,7 +824,7 @@ void KeyCallback(GLFWwindow* window_ptr, int key, int scancode, int action, int 
         QUICKDRAW_NOTIFY_OBSERVERS(KeyboardObserver, keyboard_observers, on_key_press(ks));
     }
 }
-void TypingCallback(GLFWwindow* window, unsigned int codepoint)
+void CharCallback(GLFWwindow* window, unsigned int codepoint)
 {
     KeyboardSnapshot ks = CopyKeyboardState();
     QUICKDRAW_NOTIFY_OBSERVERS(KeyboardObserver, keyboard_observers, on_char_type(ks));
