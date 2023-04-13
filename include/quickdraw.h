@@ -827,6 +827,7 @@ void KeyCallback(GLFWwindow* window_ptr, int key, int scancode, int action, int 
 }
 void CharCallback(GLFWwindow* window, unsigned int codepoint)
 {
+    typed_char = codepoint;
     KeyboardSnapshot ks = CopyKeyboardState();
     QUICKDRAW_NOTIFY_OBSERVERS(KeyboardObserver, keyboard_observers, on_char_type(ks));
 }
