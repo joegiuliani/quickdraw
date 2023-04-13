@@ -23,7 +23,6 @@ int main()
 		DrawText(Vec2(10,20), "Quickdraw");
 		DrawFrame();
 	}
-
 	Terminate();
 	return 0;
 }

@@ -990,18 +990,19 @@ float GetTextWidth(const std::string& text)
     float ret = 0;
     for (const char& c : text)
     {
-        if (!Font::IsDisplayableChar(c))
+        if (c == ' ')
         {
-            if (c == ' ')
-            {
-                ret += active_font->space_character_width();
-                continue;
-            }
-
+            ret += active_font->space_character_width();
+        }
+        else if (!Font::IsDisplayableChar(c))
+        {
             std::cout << "quickdraw::GetTextWidth Failed to get text width because 'text' argument has a character with no width\n";
             return 0;
         }
-        ret += active_font->get(c)->advance;
+        else
+        {
+            ret += active_font->get(c)->advance + curr_text_spacing;
+        }
     }
     return ret * curr_text_scale;
 }
@@ -1701,6 +1702,7 @@ void SetActiveFont(FontHandle font)
     else
         active_font = (Font*)font;
 }
+
 FontHandle LoadFont(int resolution, std::filesystem::path path)
 {
     using namespace detail;
