@@ -206,7 +206,7 @@ struct MouseSnapshot
     Vec2 pos;
     Vec2 delta;
     int  scroll = 0;
-    int  key_mods = 0;
+    int  curr_key_mods = 0;
     bool is_moving = false;
     bool any_down();
     bool any_pressed();
@@ -230,7 +230,7 @@ struct KeyboardSnapshot
     int released_key = KEY_UNKNOWN;
     int held_key = KEY_UNKNOWN;
     unsigned char typed_char = 0;
-    int key_mods = 0;
+    int curr_key_mods = 0;
 };
 struct WindowSnapshot
 {
@@ -684,11 +684,10 @@ BinaryStateSaver<Vec2> mouse_pos_state;
 BinaryStateSaver<int> mouse_button_states[NUM_MOUSE_BUTTONS];
 BinaryStateSaver<int> mouse_scroll_state;
 Vec2 mouse_delta;
-std::set<int> down_keys;
 int curr_key_pressed = KEY_UNKNOWN;
 int curr_key_released = KEY_UNKNOWN;
-int curr_key_held = KEY_UNKNOWN;
-int key_mods = 0;
+std::set<int> curr_keys_down;
+int curr_key_mods = 0;
 unsigned char typed_char = 0;
 bool atlas_updated = false;
 bool InitOpenGL()
@@ -819,7 +818,7 @@ void InitCursors()
 }
 void KeyCallback(GLFWwindow* window_ptr, int key, int scancode, int action, int mods)
 {
-    key_mods = mods;
+    curr_key_mods = mods;
 
     // We don't care about modifier keys. We'll leave that to the mods parameter.
     if (key >= KEY_LEFT_SHIFT && key <= KEY_RIGHT_SUPER)
@@ -827,28 +826,22 @@ void KeyCallback(GLFWwindow* window_ptr, int key, int scancode, int action, int 
 
     curr_key_pressed = KEY_UNKNOWN;
     curr_key_released = KEY_UNKNOWN;
-    curr_key_held = KEY_UNKNOWN;
     if (action == GLFW_PRESS)
     {
-        if (down_keys.insert(key).second)
-        {
-            curr_key_pressed = key;
-            KeyboardSnapshot ks = CopyKeyboardState();
-            QUICKDRAW_NOTIFY_OBSERVERS(KeyboardObserver, keyboard_observers, on_key_press(ks));
-        }
+        curr_key_pressed = key;
+        curr_keys_down.insert(key);
+        KeyboardSnapshot ks = CopyKeyboardState();
+        QUICKDRAW_NOTIFY_OBSERVERS(KeyboardObserver, keyboard_observers, on_key_press(ks));
     }
     else if (action == GLFW_RELEASE)
     {
-        if (down_keys.erase(key))
-        {
-            curr_key_released = key;
-            KeyboardSnapshot ks = CopyKeyboardState();
-            QUICKDRAW_NOTIFY_OBSERVERS(KeyboardObserver, keyboard_observers, on_key_release(ks));
-        }
+        curr_key_released = key;
+        curr_keys_down.erase(key);
+        KeyboardSnapshot ks = CopyKeyboardState();
+        QUICKDRAW_NOTIFY_OBSERVERS(KeyboardObserver, keyboard_observers, on_key_release(ks));
     }
-    else if (action == GLFW_REPEAT)
+    if (!curr_keys_down.empty())
     {
-        curr_key_held = key;
         KeyboardSnapshot ks = CopyKeyboardState();
         QUICKDRAW_NOTIFY_OBSERVERS(KeyboardObserver, keyboard_observers, on_key_hold(ks));
     }
@@ -877,7 +870,7 @@ void WindowSizeCallback(GLFWwindow* window_ptr, int width, int height)
 void MouseButtonCallback(GLFWwindow* window_ptr, int button, int action, int mods)
 {
     mouse_button_states[button].new_state(action);
-    key_mods = mods;
+    curr_key_mods = mods;
 
     MouseSnapshot mouse_snapshot = CopyMouseState();
     if (mouse_button_states[MouseButton(button)].current() != mouse_button_states[MouseButton(button)].previous())
@@ -957,16 +950,16 @@ MouseSnapshot CopyMouseState()
     mouse.delta = mouse_delta;
     mouse.pos = mouse_pos_state.current();
     mouse.scroll = mouse_scroll_state.current();
-    mouse.key_mods = key_mods;
+    mouse.curr_key_mods = curr_key_mods;
 
     return mouse;
 }
 KeyboardSnapshot CopyKeyboardState()
 {
     KeyboardSnapshot keyboard;
-    keyboard.key_mods = key_mods;
+    keyboard.curr_key_mods = curr_key_mods;
     keyboard.typed_char = typed_char;
-    keyboard.down_keys = down_keys;
+    keyboard.down_keys = curr_keys_down;
     keyboard.pressed_key = curr_key_pressed;
     keyboard.released_key = curr_key_released;
     return keyboard;
@@ -1076,8 +1069,8 @@ void PackTextures()
     glBindTexture(GL_TEXTURE_2D, texture_atlas_handle);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, min_atlas_width, min_atlas_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
     rect_index = 0;
