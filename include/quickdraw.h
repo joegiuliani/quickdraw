@@ -261,7 +261,7 @@ public:
 class KeyboardObserver : public Observer
 {
 public:
-    virtual void on_key_hold(const KeyboardSnapshot& keyboard) = 0;
+    virtual void on_keys_down(const KeyboardSnapshot& keyboard) = 0;
     virtual void on_key_press(const KeyboardSnapshot& keyboard) = 0;
     virtual void on_key_release(const KeyboardSnapshot& keyboard) = 0;
     virtual void on_char_type(const KeyboardSnapshot& keyboard) = 0;
@@ -843,7 +843,7 @@ void KeyCallback(GLFWwindow* window_ptr, int key, int scancode, int action, int 
     if (!curr_keys_down.empty())
     {
         KeyboardSnapshot ks = CopyKeyboardState();
-        QUICKDRAW_NOTIFY_OBSERVERS(KeyboardObserver, keyboard_observers, on_key_hold(ks));
+        QUICKDRAW_NOTIFY_OBSERVERS(KeyboardObserver, keyboard_observers, on_keys_down(ks));
     }
 }
 void CharCallback(GLFWwindow* window, unsigned int codepoint)
