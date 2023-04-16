@@ -222,10 +222,10 @@ struct MouseSnapshot
     The client will probably still end up creating saved keyboard and mouse
     states, but they will then be clearly aware of the limitations.
 */
-
 struct KeyboardSnapshot
 {
     std::set<int> down_keys;
+    std::set<int> repeated_keys;
     int pressed_key = KEY_UNKNOWN;
     int released_key = KEY_UNKNOWN;
     int held_key = KEY_UNKNOWN;
@@ -262,6 +262,7 @@ class KeyboardObserver : public Observer
 {
 public:
     virtual void on_keys_down(const KeyboardSnapshot& keyboard) = 0;
+    virtual void on_keys_repeated(const KeyboardSnapshot& keyboard) = 0;
     virtual void on_key_press(const KeyboardSnapshot& keyboard) = 0;
     virtual void on_key_release(const KeyboardSnapshot& keyboard) = 0;
     virtual void on_char_type(const KeyboardSnapshot& keyboard) = 0;
@@ -553,7 +554,7 @@ frag_quad_index             = quad_index;
 // y coordinates increase down the screen, ie flipped
 	
 vec2 ndc_pos = (pos*transform-0.5)*2;
-gl_Position = vec4(ndc_pos.x, -ndc_pos.y,0.5,1);
+gl_Position = vec4(ndc_pos.x, -ndc_pos.y,1,1);
 }
 )~");
 constexpr size_t ATTRIBS_PER_QUAD = 7;
@@ -687,6 +688,7 @@ Vec2 mouse_delta;
 int curr_key_pressed = KEY_UNKNOWN;
 int curr_key_released = KEY_UNKNOWN;
 std::set<int> curr_keys_down;
+std::set<int> curr_keys_repeated;
 int curr_key_mods = 0;
 unsigned char typed_char = 0;
 bool atlas_updated = false;
@@ -837,8 +839,13 @@ void KeyCallback(GLFWwindow* window_ptr, int key, int scancode, int action, int 
     {
         curr_key_released = key;
         curr_keys_down.erase(key);
+        curr_keys_repeated.erase(key);
         KeyboardSnapshot ks = CopyKeyboardState();
         QUICKDRAW_NOTIFY_OBSERVERS(KeyboardObserver, keyboard_observers, on_key_release(ks));
+    }
+    else if (action == GLFW_REPEAT)
+    {
+        curr_keys_repeated.insert(key);
     }
     if (!curr_keys_down.empty())
     {
@@ -929,6 +936,18 @@ void ProcessMouseEvents()
     scroll_update_received = false;
     cursor_update_received = false;
     mouse_button_update_received = false;
+}
+void ProcessKeyEvents()
+{
+    KeyboardSnapshot ks = CopyKeyboardState();
+    if (!curr_keys_repeated.empty())
+    {
+        QUICKDRAW_NOTIFY_OBSERVERS(KeyboardObserver, keyboard_observers, on_keys_repeated(ks));
+    }
+    if (!curr_keys_down.empty())
+    {
+        QUICKDRAW_NOTIFY_OBSERVERS(KeyboardObserver, keyboard_observers, on_keys_down(ks));
+    }
 }
 MouseSnapshot CopyMouseState()
 {
@@ -1299,7 +1318,8 @@ void DrawFrame()
     vertex_dynamic_attribs_to_draw.clear();
     glfwSwapBuffers(glfw_window_handle);
     glClearColor(background_color.r, background_color.g, background_color.b, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
+    glClearDepth(0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 bool ShouldClose()
 {

@@ -16,10 +16,13 @@ int main()
 	{
 		SetTextScale(24 + sinf(Time())*10);
 		NewFrame();
+
 		SetFillColor(RGBA(0, 0, 0, 1));
 		DrawRect(Vec2(0), Vec2(100));
+
 		SetFillColor(RGBA(1));
-		DrawText(Vec2(10,20), "quickdraw");
+		DrawText(Vec2(10, 20), "quickdraw");
+
 		DrawFrame();
 	}
 	Terminate();
