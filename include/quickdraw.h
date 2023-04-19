@@ -228,7 +228,7 @@ struct KeyboardSnapshot
     std::set<int> repeated_keys;
     int pressed_key = KEY_UNKNOWN;
     int released_key = KEY_UNKNOWN;
-    int held_key = KEY_UNKNOWN;
+    int repeated_key = KEY_UNKNOWN;
     unsigned char typed_char = 0;
     int curr_key_mods = 0;
 };
@@ -261,8 +261,7 @@ public:
 class KeyboardObserver : public Observer
 {
 public:
-    virtual void on_keys_down(const KeyboardSnapshot& keyboard) = 0;
-    virtual void on_keys_repeated(const KeyboardSnapshot& keyboard) = 0;
+    virtual void on_key_repeat(const KeyboardSnapshot& keyboard) = 0;
     virtual void on_key_press(const KeyboardSnapshot& keyboard) = 0;
     virtual void on_key_release(const KeyboardSnapshot& keyboard) = 0;
     virtual void on_char_type(const KeyboardSnapshot& keyboard) = 0;
@@ -607,6 +606,10 @@ public:
     {
         return space_glyph_width_;
     }
+    float centering_offset()
+    {
+        return centering_offset_;
+    }
 private:
     static constexpr unsigned char FIRST_VALID_CHAR = 33;
     static constexpr unsigned char LAST_VALID_CHAR = 126;
@@ -614,6 +617,7 @@ private:
     detail::Glyph glyphs_[NUM_VALID_CHARS];
     bool ready_to_use_ = false;
     float max_text_height_ = 0;
+    float centering_offset_ = 0;
     float space_glyph_width_ = 0;
 };
 template<typename T>
@@ -689,6 +693,7 @@ int curr_key_pressed = KEY_UNKNOWN;
 int curr_key_released = KEY_UNKNOWN;
 std::set<int> curr_keys_down;
 std::set<int> curr_keys_repeated;
+int curr_key_repeated;
 int curr_key_mods = 0;
 unsigned char typed_char = 0;
 bool atlas_updated = false;
@@ -828,6 +833,7 @@ void KeyCallback(GLFWwindow* window_ptr, int key, int scancode, int action, int 
 
     curr_key_pressed = KEY_UNKNOWN;
     curr_key_released = KEY_UNKNOWN;
+    curr_key_repeated = KEY_UNKNOWN;
     if (action == GLFW_PRESS)
     {
         curr_key_pressed = key;
@@ -846,11 +852,9 @@ void KeyCallback(GLFWwindow* window_ptr, int key, int scancode, int action, int 
     else if (action == GLFW_REPEAT)
     {
         curr_keys_repeated.insert(key);
-    }
-    if (!curr_keys_down.empty())
-    {
+        curr_key_repeated = key;
         KeyboardSnapshot ks = CopyKeyboardState();
-        QUICKDRAW_NOTIFY_OBSERVERS(KeyboardObserver, keyboard_observers, on_keys_down(ks));
+        QUICKDRAW_NOTIFY_OBSERVERS(KeyboardObserver, keyboard_observers, on_key_repeat(ks));
     }
 }
 void CharCallback(GLFWwindow* window, unsigned int codepoint)
@@ -937,18 +941,6 @@ void ProcessMouseEvents()
     cursor_update_received = false;
     mouse_button_update_received = false;
 }
-void ProcessKeyEvents()
-{
-    KeyboardSnapshot ks = CopyKeyboardState();
-    if (!curr_keys_repeated.empty())
-    {
-        QUICKDRAW_NOTIFY_OBSERVERS(KeyboardObserver, keyboard_observers, on_keys_repeated(ks));
-    }
-    if (!curr_keys_down.empty())
-    {
-        QUICKDRAW_NOTIFY_OBSERVERS(KeyboardObserver, keyboard_observers, on_keys_down(ks));
-    }
-}
 MouseSnapshot CopyMouseState()
 {
     MouseSnapshot mouse;
@@ -979,8 +971,10 @@ KeyboardSnapshot CopyKeyboardState()
     keyboard.curr_key_mods = curr_key_mods;
     keyboard.typed_char = typed_char;
     keyboard.down_keys = curr_keys_down;
+    keyboard.repeated_keys = curr_keys_repeated;
     keyboard.pressed_key = curr_key_pressed;
     keyboard.released_key = curr_key_released;
+    keyboard.repeated_key = curr_key_repeated;
     return keyboard;
 }
 WindowSnapshot CopyWindowState()
@@ -1122,7 +1116,7 @@ Font::Font(int resolution, std::filesystem::path path)
     FT_Face face;
     if (FT_New_Face(ft, path_str.c_str(), 0, &face))
     {
-        std::cout << "quickdraw::FontAtlas::FontAtlas Failed to load " << path << '\n';
+        std::cout << "quickdraw::Font::Font Failed to load " << path << '\n';
         return;
     }
     FT_Set_Pixel_Sizes(face, 0, resolution);
@@ -1130,7 +1124,6 @@ Font::Font(int resolution, std::filesystem::path path)
     std::vector<GLubyte> glyph_bitmaps[NUM_VALID_CHARS];
     int min_atlas_area = 0;
     // width / rows
-    float avg_glyph_aspect_ratio = 0;
     float max_dist_above_baseline = 0;
     float max_dist_below_baseline = 0;
     // Load displayable characters
@@ -1148,8 +1141,8 @@ Font::Font(int resolution, std::filesystem::path path)
         glyph.bearing = Vec2(face->glyph->bitmap_left, face->glyph->bitmap_top);
         glyph.advance = face->glyph->advance.x * ADVANCE_FAC; // If text quads are positioned incorrectly its probably this
         min_atlas_area += glyph.size.x * glyph.size.y;
-        avg_glyph_aspect_ratio += glyph.size.x / glyph.size.y;
         space_glyph_width_ += glyph.size.x; // will be average of displayable character widths
+        centering_offset_ += -glyph.bearing.y + glyph.size.y * 0.5f;
         max_dist_above_baseline = std::max(max_dist_above_baseline, glyph.bearing.y);
         max_dist_below_baseline = std::max(max_dist_below_baseline, glyph.size.y - glyph.bearing.y);
 
@@ -1175,6 +1168,7 @@ Font::Font(int resolution, std::filesystem::path path)
 
     // Set fields
     space_glyph_width_ /= NUM_VALID_CHARS; // is the average of displayable character widths
+    centering_offset_ /= NUM_VALID_CHARS;
     max_text_height_ = max_dist_above_baseline + max_dist_below_baseline;
 
     // Apply import scale
@@ -1430,7 +1424,7 @@ void DrawText(const Vec2& pos, const std::string& text)
             return;
         }
         Glyph& glyph = *active_font->get(c);
-        Vec2 glyph_draw_pos = pos + curr_text_scale * Vec2(x_cursor + glyph.bearing.x, -glyph.bearing.y);
+        Vec2 glyph_draw_pos = pos + curr_text_scale * Vec2(x_cursor + glyph.bearing.x, -glyph.bearing.y + active_font->centering_offset());
         Vec2 glyph_draw_size = curr_text_scale * glyph.size;
         curr_vertex_attribs[UPPER_START].fill_color = glm::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, (glyph_draw_pos.x - pos.x) / text_width);
         curr_vertex_attribs[UPPER_END].fill_color = glm::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, (glyph_draw_pos.x + glyph_draw_size.x - pos.x) / text_width);
