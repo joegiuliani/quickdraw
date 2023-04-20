@@ -1142,7 +1142,7 @@ Font::Font(int resolution, std::filesystem::path path)
         glyph.advance = face->glyph->advance.x * ADVANCE_FAC; // If text quads are positioned incorrectly its probably this
         min_atlas_area += glyph.size.x * glyph.size.y;
         space_glyph_width_ += glyph.size.x; // will be average of displayable character widths
-        centering_offset_ += -glyph.bearing.y + glyph.size.y * 0.5f;
+        centering_offset_ += -glyph.bearing.y + glyph.size.y * 0.5f; // try with just bearing next time
         max_dist_above_baseline = std::max(max_dist_above_baseline, glyph.bearing.y);
         max_dist_below_baseline = std::max(max_dist_below_baseline, glyph.size.y - glyph.bearing.y);
 
@@ -1181,6 +1181,7 @@ Font::Font(int resolution, std::filesystem::path path)
     }
     space_glyph_width_ *= font_import_scale;
     max_text_height_ *= font_import_scale;
+    centering_offset_ *= font_import_scale;
 
     // Cleanup
     FT_Done_Face(face);
@@ -1424,7 +1425,7 @@ void DrawText(const Vec2& pos, const std::string& text)
             return;
         }
         Glyph& glyph = *active_font->get(c);
-        Vec2 glyph_draw_pos = pos + curr_text_scale * Vec2(x_cursor + glyph.bearing.x, -glyph.bearing.y + active_font->centering_offset());
+        Vec2 glyph_draw_pos = pos + curr_text_scale * Vec2(x_cursor + glyph.bearing.x, -glyph.bearing.y - active_font->centering_offset());
         Vec2 glyph_draw_size = curr_text_scale * glyph.size;
         curr_vertex_attribs[UPPER_START].fill_color = glm::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, (glyph_draw_pos.x - pos.x) / text_width);
         curr_vertex_attribs[UPPER_END].fill_color = glm::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, (glyph_draw_pos.x + glyph_draw_size.x - pos.x) / text_width);
