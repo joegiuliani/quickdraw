@@ -1,5 +1,5 @@
 # quickdraw
-Simple, highly customizable 2D graphics library. Draw rounded rects and paths with outlines and gradients. Load images and fonts from files on demand. Quickly add and remove Window, Keyboard, Mouse, and Character Typing observers.
+Header only 2D graphics library. Draw rounded rects and paths with outlines and gradients. Load images and fonts from files on demand. Quickly add and remove Window, Keyboard, Mouse, and Character Typing observers.
 
 # Setup
 A clone of the repo should run in Visual Studio 2022. Otherwise, link to libraries in 'lib' and include 'quickdraw.h'. Make sure 'src/glfw3.dll' is available to your executable.
