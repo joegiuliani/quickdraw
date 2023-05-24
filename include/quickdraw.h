@@ -163,6 +163,8 @@ enum ButtonState
     UP = GLFW_RELEASE,
     DOWN = GLFW_PRESS
 };
+// - For targeting a specific corner of a shape for example 
+//   when manipulating the color or corner mask.
 enum ShapeLoc
 {
     UPPER_START = 0,
@@ -170,6 +172,8 @@ enum ShapeLoc
     LOWER_END = 2,
     LOWER_START = 3
 };
+// - Graphical representation of cursors
+// - Arrow , typing, crosshair, etc...
 enum Cursor
 {
     ARROW = GLFW_ARROW_CURSOR,
@@ -428,23 +432,18 @@ struct MouseSnapshot
     bool is_released[NUM_MOUSE_BUTTONS] = { false };
     Vec2 pos;
     Vec2 delta;
+    // - [-1, 0, 1]
     int  scroll = 0;
+    // - Example: x.curr_key_mods == (KEY_MOD_SHIFT | KEY_MOD_CONTROL)
     int  curr_key_mods = 0;
     bool is_moving = false;
+
     bool any_down();
     bool any_pressed();
     bool any_released();
 };
-/*
-    Snapshots are used to send Mouse and Keyboard data to observers.
-    The point of sending Mouse and Keyboard states through callback functions
-    instead of providing a randomly accessable getter is to discourage the use
-    of mouse and keyboard states during the drawing stage when those states 
-    are inaccurate.
-
-    The client will probably still end up creating saved keyboard and mouse
-    states, but they will then be clearly aware of the limitations.
-*/
+// - Passed to keyboard listeners on callback when a new
+//   keyboard/character/typing event is polled
 struct KeyboardSnapshot
 {
     std::set<int> down_keys;
@@ -455,6 +454,8 @@ struct KeyboardSnapshot
     unsigned char typed_char = 0;
     int curr_key_mods = 0;
 };
+// - Passed to window listeners on callback when a new
+//   window event is polled
 struct WindowSnapshot
 {
     Vec2 viewport_size = Vec2(0);
@@ -490,7 +491,7 @@ public:
     virtual void on_char_type(const KeyboardSnapshot& keyboard) = 0;
 };
 // - Returns a non-zero value if there was an issue during initialization.
-//   width and height must be greater than 0
+// - size.x and size.y must be greater than 0
 bool Init(const std::string& name, const Vec2& size);
 bool AddWindowObserver(WindowObserver* ob);
 bool RemoveWindowObserver(WindowObserver* ob);
@@ -498,7 +499,7 @@ bool AddMouseObserver(MouseObserver* ob);
 bool RemoveMouseObserver(MouseObserver* ob);
 bool AddKeyboardObserver(KeyboardObserver* ob);
 bool RemoveKeyboardObserver(KeyboardObserver* ob);
-// Returns nullptr before quickdraw::window::Init() is called
+// - Returns nullptr before quickdraw::window::Init() is called
 GLFWwindow* GetGLFWWindowHandle();
 void SetWindowIcon(std::filesystem::path file);
 // - Returns the time in seconds
@@ -507,14 +508,15 @@ double Time();
 double DeltaTime();
 // - Returns the number of frames since the start of the program so that
 //   0 is returned during the first frame.
-// - A negative number may be returned that the previous frame number is
-// always less than the current
-int FrameNumber();
+size_t FrameNumber();
 // - Returns the size of the drawing context
 Vec2 ViewportSize();
 void SetBackgroundColor(const RGBA& color);
 // - Updates frame information and polls input events
 void NewFrame();
+// - Sends shapes to GPU to be drawn
+// - DrawRect, DrawText, etc... do nothing without this
+// - Clears stored shapes to be drawn before returning
 void DrawFrame();
 bool ShouldClose();
 void Terminate();
@@ -522,16 +524,17 @@ void DrawRect(const Vec2& pos, const Vec2& size);
 // - Set scale with SetTextScale
 // - Set spacing with SetTextSpacing
 void DrawText(const Vec2& pos, const std::string& Text);
-// - Works best with high resolution curves.
-// - points.size() cannot be less than 2
+// - points.size() may not be less than 2
 void DrawPath(const std::vector<Vec2>& points, float thickness, const Vec2& offset = Vec2(0));
 // - When the image is drawn its pixels are multiplied by the current fill color.
-// - For example, if fill = RGBA(0,0,0,0) the image is invisible,
-//   if fill = RGBA(1,0,1,0.5) the image is half transparent and only the
+// - For example, if fill = RGBA(1,1,1,0) the image is invisible.
+//   If fill = RGBA(1,0,1,0.5) the image is half transparent and only the
 //   red and blue channels are visible.
 void DrawTexture(TextureHandle handle, const Vec2& pos, const Vec2& size);
 // - Filetype must be supoprted by stb_image
 std::pair<TextureHandle, Vec2> LoadTexture(std::filesystem::path file);
+// - EnableScissor and DisableScissor will be replaced with new functions
+//   that allow for enabling/disabling scissoring for certain shapes
 void EnableScissor(const Vec2& pos, const Vec2& size);
 // - Disables the scissor test
 void DisableScissor();
@@ -539,8 +542,11 @@ void SetFillColor(const RGBA& color, ShapeLoc loc);
 void SetFillColor(const RGBA& color);
 void SetOutlineColor(const RGBA& color, ShapeLoc loc);
 void SetOutlineColor(const RGBA& color);
+// - Turns corner rounding on/off for DrawRect() for a given corner
 void SetRectRoundedMask(bool mask, ShapeLoc loc);
+// - Turns corner rounding on/off for DrawRect()
 void SetRectRoundedMask(bool mask);
+// - Sets corner rounding size for rect
 void SetRectRoundedSize(float size);
 // Sets the thickness of the outline of the rectangle to be drawn
 void SetOutlineThickness(float thickness);
@@ -552,6 +558,7 @@ void SetTextScale(float scale);
 Vec2 TextSize(const std::string& str);
 // - Make sure to set the desired text scale before calling this method.
 float MaxTextHeight();
+// - Sets the graphical representation of the cursor when inside the window
 void SetCursor(Cursor cursor);
 // - Shows/hides the cursor when inside the window
 void SetCursorEnabled(bool flag);
@@ -563,25 +570,101 @@ FontHandle LoadFont(int resolution, std::filesystem::path path);
 void SetActiveFont(FontHandle font);
 namespace detail
 {
+constexpr size_t ATTRIBS_PER_QUAD = 7;
+constexpr size_t VERTS_PER_QUAD = 4;
+constexpr size_t ELEMS_PER_QUAD = 6;
 enum QuadMode
 {
     RECT_MODE = 0,
     TEXTURE_MODE = 1,
     PATH_MODE = 2
 };
+struct Glyph
+{
+    TextureHandle texture = nullptr;
+    Vec2 size = Vec2(0);
+    Vec2 bearing = Vec2(0);
+    float advance = 0;
+};
+// - Texture stored in an atlas
+// - uv_start and uv_end refer to the texture's
+//   minimum and maximum coordinates in the atlas
+struct Texture
+{
+    std::vector<GLubyte> bitmap = std::vector<GLubyte>(0);
+    Vec2 uv_start = Vec2(0);
+    Vec2 uv_end = Vec2(0);
+    int width = 0;
+    int height = 0;
+};
+struct DynamicVertexAttribs
+{
+    Vec2 pos = Vec2(0);
+    Vec2 uv = Vec2(0);
+    GLfloat corner_mask = 1;
+    RGBA fill_color = RGBA(1, 0, 1, 1);
+    RGBA outline_color = RGBA(1, 0, 1, 1);
+};
+struct StaticVertexAttribs
+{
+    GLuint quad_index;
+    StaticVertexAttribs(GLuint t_quad_index);
+};
+class Font
+{
+public:
+    static constexpr bool IsDisplayableChar(unsigned char c);
+    Font(int resolution, std::filesystem::path path);
+    // Returns this->end() if IsDisplayableChar(c) is false
+    Glyph* get(unsigned char c);
+    Glyph* begin();
+    Glyph* end();
+    bool ready_to_use();
+    float max_text_height();
+    float space_glyph_width();
+    float centering_offset();
+private:
+    static constexpr unsigned char FIRST_VALID_CHAR = 33;
+    static constexpr unsigned char LAST_VALID_CHAR = 126;
+    static constexpr int NUM_VALID_CHARS = 1 + LAST_VALID_CHAR - FIRST_VALID_CHAR;
+    Glyph glyphs_[NUM_VALID_CHARS];
+    bool ready_to_use_ = false;
+    float max_text_height_ = 0;
+    float centering_offset_ = 0;
+    float space_glyph_width_ = 0;
+};
 template<typename T>
-struct BinaryStateSaver;
-struct DynamicVertexAttribs;
-struct StaticVertexAttribs;
-struct Glyph;
-struct Texture;
-class Font;
+class BinaryStateSaver
+{
+public:
+    void new_state(T state)
+    {
+        previous_ = current_;
+        current_ = state;
+    }
+    T previous() const
+    {
+        return previous_;
+    }
+    T current() const
+    {
+        return current_;
+    }
+private:
+    T current_;
+    T previous_;
+};
 void SetQuadMode(QuadMode mode);
 void SetRectPosAndSize(const Vec2& pos, const Vec2& size);
 void SetPathThickness(float thickness);
+// - The most basic draw function
+// - All public draw functions call this
 void DrawQuad();
 Vec2 Normal(const Vec2& slope);
+// - Registers the texture
+// - Does not call PackTextures()
 std::pair<TextureHandle, Vec2> LoadTexture(int width, int height, std::vector<GLubyte> rgba_bitmap);
+// - Sets up / updates texture atlas with loaded textures
 void PackTextures();
 void GLFWErrorCallback(int error, const char* description);
 void WindowSizeCallback(GLFWwindow* window, int width, int height);
@@ -598,23 +681,19 @@ void CharCallback(GLFWwindow* window, unsigned int codepoint);
 MouseSnapshot CopyMouseState();
 KeyboardSnapshot CopyKeyboardState();
 WindowSnapshot CopyWindowState();
-} // namespace detail
 
 #define QUICKDRAW_NOTIFY_OBSERVERS(arg_observer_type, arg_observers, arg_member_function) \
 {\
 std::set<arg_observer_type*> observers_this_notification = arg_observers; \
 for (arg_observer_type* ob : observers_this_notification)\
 {\
-    ob->arg_member_function;\
+ob->arg_member_function;\
 }\
 }
 #define QUICKDRAW_ANY_MOUSE_BUTTON_TRUE(bool_array) bool_array[LEFT] || bool_array[MIDDLE] || bool_array[RIGHT]
-// DEFINITIONS
 
-namespace detail
-{
 std::istringstream FRAGMENT_SHADER_CODE(
-R"~(
+        R"~(
 
 #version 450 compatibility
 layout(std430, binding = 0) buffer Quads
@@ -678,22 +757,33 @@ vec4 color = frag_fill_color;
 
 if (quad_mode() == MODE_TEXTURE)
 {
-	color *= texture(texture_atlas, frag_uv);
+color *= texture(texture_atlas, frag_uv);
 }
 else  if (quad_mode() == MODE_PATH)
 {
+// Pixel is in the outline
+if (path_thickness() * (1 - abs((frag_uv.y - 0.5) * 2)) < quad_outline_thickness())
+{
+	color = frag_outline_color;
+}
+}
+else if (quad_mode() == MODE_RECT)
+{
+vec2 local_frag_pos = frag_pos - rect_pos();
+vec2 local_vert_pos = round(frag_uv) * rect_size(); // Closest vertex to fragment
+
+if (round(frag_corner_mask) == 0)
+{
 	// Pixel is in the outline
-	if (path_thickness() * (1 - abs((frag_uv.y - 0.5) * 2)) < quad_outline_thickness())
+	vec2 frag_to_vert_dist = abs(local_vert_pos - local_frag_pos);
+	if (frag_to_vert_dist.x < quad_outline_thickness() || frag_to_vert_dist.y < quad_outline_thickness())
 	{
 		color = frag_outline_color;
 	}
 }
-else if (quad_mode() == MODE_RECT)
+else
 {
-	vec2 local_frag_pos = frag_pos - rect_pos();
-	vec2 local_vert_pos = round(frag_uv) * rect_size(); // Closest vertex to fragment
-
-	if (round(frag_corner_mask) == 0)
+	if (in_bounds(local_frag_pos.x, rect_corner_size(), rect_size().x - rect_corner_size()) || in_bounds(local_frag_pos.y, rect_corner_size(), rect_size().y - rect_corner_size()))
 	{
 		// Pixel is in the outline
 		vec2 frag_to_vert_dist = abs(local_vert_pos - local_frag_pos);
@@ -702,44 +792,31 @@ else if (quad_mode() == MODE_RECT)
 			color = frag_outline_color;
 		}
 	}
+
 	else
 	{
-		if (in_bounds(local_frag_pos.x, rect_corner_size(), rect_size().x - rect_corner_size()) || in_bounds(local_frag_pos.y, rect_corner_size(), rect_size().y - rect_corner_size()))
+		vec2 origin = local_vert_pos - rect_corner_size() * (round(frag_uv) * 2 - 1);
+		float dist = distance(local_frag_pos, origin);
+
+		// Pixel is outside the rounded rect
+		if (dist > rect_corner_size())
 		{
-			// Pixel is in the outline
-			vec2 frag_to_vert_dist = abs(local_vert_pos - local_frag_pos);
-			if (frag_to_vert_dist.x < quad_outline_thickness() || frag_to_vert_dist.y < quad_outline_thickness())
-			{
-				color = frag_outline_color;
-			}
+			discard;
 		}
 
-		else
+		// Pixel is in the outline
+		else if (dist > rect_corner_size() - quad_outline_thickness())
 		{
-			vec2 origin = local_vert_pos - rect_corner_size() * (round(frag_uv) * 2 - 1);
-			float dist = distance(local_frag_pos, origin);
-
-			// Pixel is outside the rounded rect
-			if (dist > rect_corner_size())
-			{
-				discard;
-			}
-
-			// Pixel is in the outline
-			else if (dist > rect_corner_size() - quad_outline_thickness())
-			{
-				color = frag_outline_color;
-			}
+			color = frag_outline_color;
 		}
 	}
+}
 }
 
 color_out = color;
 }
 )~");
-
-
-    std::istringstream VERTEX_SHADER_CODE(
+std::istringstream VERTEX_SHADER_CODE(
         R"~(
 #version 450 compatibility
 
@@ -779,132 +856,163 @@ vec2 ndc_pos = (pos*transform-0.5)*2;
 gl_Position = vec4(ndc_pos.x, -ndc_pos.y,1,1);
 }
 )~");
-constexpr size_t ATTRIBS_PER_QUAD = 7;
-constexpr size_t VERTS_PER_QUAD = 4;
-constexpr size_t ELEMS_PER_QUAD = 6;
-struct Glyph
+constexpr bool Font::IsDisplayableChar(unsigned char c)
 {
-    TextureHandle texture = nullptr;
-    Vec2 size = Vec2(0);
-    Vec2 bearing = Vec2(0);
-    float advance = 0;
-};
-struct Texture
+    using namespace detail;
+    return c >= FIRST_VALID_CHAR && c <= LAST_VALID_CHAR;
+}
+Font::Font(int resolution, std::filesystem::path path)
 {
-    std::vector<GLubyte> bitmap = std::vector<GLubyte>(0);
-    Vec2 uv_start = Vec2(0);
-    Vec2 uv_end = Vec2(0);
-    int width = 0;
-    int height = 0;
-};
-class Font
-{
-public:
-    static constexpr bool IsDisplayableChar(unsigned char c);
-    Font(int resolution, std::filesystem::path path);
-    // Returns this->end() if IsDisplayableChar(c) is false
-    detail::Glyph* get(unsigned char c)
+    using namespace detail;
+    FT_Library ft;
+    if (FT_Init_FreeType(&ft))
     {
-        if (!IsDisplayableChar(c))
-            return end();
-        return begin() + (c - FIRST_VALID_CHAR);
+        std::cout << "quickdraw::FontAtlas::FontAtlas Failed to initalize FreeType\n";
+        return;
     }
-    detail::Glyph* begin()
+    std::string path_str = path.generic_string();
+    FT_Face face;
+    if (FT_New_Face(ft, path_str.c_str(), 0, &face))
     {
-        return &glyphs_[0];
+        std::cout << "quickdraw::Font::Font Failed to load " << path << '\n';
+        return;
     }
-    detail::Glyph* end()
+    FT_Set_Pixel_Sizes(face, 0, resolution);
+    std::vector<GLubyte> glyph_bitmaps[NUM_VALID_CHARS];
+    int min_atlas_area = 0;
+    float max_dist_above_baseline = 0;
+    float max_dist_below_baseline = 0;
+    float ADVANCE_FAC = 1.0f / float(1 << 6);
+    for (int k = 0; k < NUM_VALID_CHARS; k++)
     {
-        return glyphs_ + NUM_VALID_CHARS;
-    }
-    bool ready_to_use()
-    {
-        return ready_to_use_;
-    }
-    float max_text_height()
-    {
-        return max_text_height_;
-    }
-    float space_glyph_width()
-    {
-        return space_glyph_width_;
-    }
-    float centering_offset()
-    {
-        return centering_offset_;
-    }
-private:
-    static constexpr unsigned char FIRST_VALID_CHAR = 33;
-    static constexpr unsigned char LAST_VALID_CHAR = 126;
-    static constexpr int NUM_VALID_CHARS = 1 + LAST_VALID_CHAR - FIRST_VALID_CHAR;
-    detail::Glyph glyphs_[NUM_VALID_CHARS];
-    bool ready_to_use_ = false;
-    float max_text_height_ = 0;
-    float centering_offset_ = 0;
-    float space_glyph_width_ = 0;
-};
-template<typename T>
-class BinaryStateSaver
-{
+        Glyph& glyph = glyphs_[k];
+        if (FT_Load_Char(face, k + FIRST_VALID_CHAR, FT_LOAD_RENDER))
+        {
+            std::cout << "quickdraw::FontAtlas::FontAtlas Failed to load \'" << (char)(k + FIRST_VALID_CHAR) << "\'\n";
+            return;
+        }
 
-public:
-    void new_state(T state)
-    {
-        previous_ = current_;
-        current_ = state;
+        // Set up glyph data
+        glyph.size = Vec2(face->glyph->bitmap.width, face->glyph->bitmap.rows);
+        glyph.bearing = Vec2(face->glyph->bitmap_left, face->glyph->bitmap_top);
+        glyph.advance = face->glyph->advance.x * ADVANCE_FAC;
+        std::vector<GLubyte> bitmap(glyph.size.x * NUM_PIXEL_CHANNELS * glyph.size.y);
+        for (int x = 0; x < glyph.size.x; x++)
+        {
+            for (int y = 0; y < glyph.size.y; y++)
+            {
+                bitmap[(x + y * glyph.size.x) * NUM_PIXEL_CHANNELS + 0] = 255;
+                bitmap[(x + y * glyph.size.x) * NUM_PIXEL_CHANNELS + 1] = 255;
+                bitmap[(x + y * glyph.size.x) * NUM_PIXEL_CHANNELS + 2] = 255;
+                bitmap[(x + y * glyph.size.x) * NUM_PIXEL_CHANNELS + 3] = face->glyph->bitmap.buffer[x + y * (int)glyph.size.x];
+            }
+        }
+        glyph.texture = LoadTexture(glyph.size.x, glyph.size.y, bitmap).first;
+        if (glyph.texture == nullptr)
+        {
+            std::cout << "quickdraw::FontAtlas::FontAtlas Failed to load \'" << path << "\'\n";
+            return;
+        }
+
+        // Contribute to font data
+        min_atlas_area += glyph.size.x * glyph.size.y;
+        space_glyph_width_ += glyph.size.x;
+        centering_offset_ += -glyph.bearing.y + glyph.size.y * 0.5f;
+        max_dist_above_baseline = std::max(max_dist_above_baseline, glyph.bearing.y);
+        max_dist_below_baseline = std::max(max_dist_below_baseline, glyph.size.y - glyph.bearing.y);
     }
-    T previous() const
+
+    // Apply font data
+    space_glyph_width_ /= NUM_VALID_CHARS; // is the average of displayable character widths
+    centering_offset_ /= NUM_VALID_CHARS;
+    max_text_height_ = max_dist_above_baseline + max_dist_below_baseline;
+
+    // Apply import scale
+    float font_import_scale = 1.0f / resolution;
+    for (Glyph& g : glyphs_)
     {
-        return previous_;
+        g.size *= font_import_scale;
+        g.bearing *= font_import_scale;
+        g.advance *= font_import_scale;
     }
-    T current() const
-    {
-        return current_;
-    }
-private:
-    T current_;
-    T previous_;
-};
-struct DynamicVertexAttribs
+    space_glyph_width_ *= font_import_scale;
+    max_text_height_ *= font_import_scale;
+    centering_offset_ *= font_import_scale;
+
+    // Cleanup
+    FT_Done_Face(face);
+    FT_Done_FreeType(ft);
+    ready_to_use_ = true;
+}
+// - Returns this->end() if IsDisplayableChar(c) is false
+Glyph* Font::get(unsigned char c)
 {
-    Vec2 pos = Vec2(0);
-    Vec2 uv = Vec2(0);
-    GLfloat corner_mask = 1;
-    RGBA fill_color = RGBA(1, 0, 1, 1);
-    RGBA outline_color = RGBA(1, 0, 1, 1);
-};
-struct StaticVertexAttribs
+    if (!IsDisplayableChar(c))
+        return Font::end();
+    return begin() + (c - FIRST_VALID_CHAR);
+}
+Glyph* Font::begin()
 {
-    GLuint quad_index;
-    StaticVertexAttribs(GLuint t_quad_index) :quad_index(t_quad_index)
-    {}
-};
+    return &glyphs_[0];
+}
+Glyph* Font::end()
+{
+    return glyphs_ + NUM_VALID_CHARS;
+}
+bool Font::ready_to_use()
+{
+    return ready_to_use_;
+}
+float Font::max_text_height()
+{
+    return max_text_height_;
+}
+float Font::space_glyph_width()
+{
+    return space_glyph_width_;
+}
+float Font::centering_offset()
+{
+    return centering_offset_;
+}
+StaticVertexAttribs::StaticVertexAttribs(GLuint t_quad_index)
+{
+    quad_index = t_quad_index;
+}
 GLFWwindow* glfw_window_handle = nullptr;
 GLuint texture_atlas_handle = 0;
 GLuint transform_handle, shader_handle;
 GLuint quad_vao, vertex_dynamic_attribs_vbo, vertex_static_attribs_vbo, vertex_ebo, quad_attribs_ssbo;
 Font* active_font = nullptr;
 Font* default_font = nullptr;
+// - Contains the element order for vertex buffers to draw quads
 GLuint BASE_VERTEX_ELEMS[ELEMS_PER_QUAD]{ 2, 1, 0, 2, 0, 3 };
 std::set<WindowObserver*> window_observers;
 std::set<MouseObserver*> mouse_observers;
 std::set<KeyboardObserver*> keyboard_observers;
 std::list<Texture> atlas_textures;
 std::list<Font> fonts;
+// - Contains all GLFW's standard cursors
 GLFWcursor* cursor_ptrs[NUM_CURSORS];
 std::vector<DynamicVertexAttribs> vertex_dynamic_attribs_to_draw;
 std::vector<StaticVertexAttribs> vertex_static_attribs_to_draw;
 std::vector<GLuint> vertex_elements_to_draw;
 std::vector<float> quads_attribs_to_draw;
+// - holds parameters for DrawQuad
 DynamicVertexAttribs curr_vertex_attribs[VERTS_PER_QUAD];
+// - Tells us whether we need to resize certain OpenGL buffers
 size_t most_quads_drawn = 0;
 float curr_text_scale = 24;
+// - holds parameters for DrawQuad
 float curr_quad_attribs[ATTRIBS_PER_QUAD];
 RGBA background_color = RGBA(0);
 Vec2 viewport_size(640, 480);
+// - Holds the value of glfwGetTime() from the last frame
 double last_time = 0;
+// - Holds the duration of time between the two most recent
+// - NewFrame() calls
 double delta_time = 0;
-int frame_number = 0;
+size_t frame_number = 0;
 bool scroll_update_received = false;
 bool cursor_update_received = false;
 bool mouse_button_update_received = false;
@@ -924,12 +1032,14 @@ bool InitOpenGL()
 {
     const char* METHOD_ERROR_HEADER = "quickdraw::InitOpenGL ";
 
+    // Load OpenGL
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {
         std::cout << METHOD_ERROR_HEADER << "Failed to load OpenGL\n";
         return false;
     }
 
+    // Compile shaders
     std::filesystem::path vertex_shader_path = std::filesystem::current_path() / "resources" / "quad.vert";
     std::filesystem::path fragment_shader_path = std::filesystem::current_path() / "resources" / "quad.frag";
     std::string vert_code = VERTEX_SHADER_CODE.str(), frag_code = FRAGMENT_SHADER_CODE.str();
@@ -974,6 +1084,8 @@ bool InitOpenGL()
     glDeleteShader(fragment);
     glUseProgram(shader_handle);
     transform_handle = glGetUniformLocation(shader_handle, "transform");
+
+    // Setup OpenGL buffers
     glGenVertexArrays(1, &quad_vao);
     glGenBuffers(1, &vertex_dynamic_attribs_vbo);
     glGenBuffers(1, &vertex_static_attribs_vbo);
@@ -985,7 +1097,6 @@ bool InitOpenGL()
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vertex_ebo);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, quad_attribs_ssbo);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, quad_attribs_ssbo);
-
     glBindBuffer(GL_ARRAY_BUFFER, vertex_dynamic_attribs_vbo);
     GLuint vertex_pos_loc = glGetAttribLocation(shader_handle, "pos");
     glEnableVertexAttribArray(vertex_pos_loc);
@@ -1002,7 +1113,6 @@ bool InitOpenGL()
     GLuint vertex_uv_loc = glGetAttribLocation(shader_handle, "uv");
     glEnableVertexAttribArray(vertex_uv_loc);
     glVertexAttribPointer(vertex_uv_loc, 2, GL_FLOAT, GL_FALSE, sizeof(DynamicVertexAttribs), (void*)offsetof(DynamicVertexAttribs, DynamicVertexAttribs::uv));
-
     glBindBuffer(GL_ARRAY_BUFFER, vertex_static_attribs_vbo);
     GLuint vertex_quad_index_loc = glGetAttribLocation(shader_handle, "quad_index");
     glEnableVertexAttribArray(vertex_quad_index_loc);
@@ -1028,8 +1138,6 @@ void InitMouse()
             std::cout << "Error creating cursor " << k << "\n";
     }
 
-    if (glfwRawMouseMotionSupported())
-        glfwSetInputMode(glfw_window_handle, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
     glfwSetScrollCallback(glfw_window_handle, ScrollCallback);
     glfwSetCursorPosCallback(glfw_window_handle, CursorCallback);
     glfwSetMouseButtonCallback(glfw_window_handle, MouseButtonCallback);
@@ -1322,96 +1430,6 @@ void PackTextures()
         ++rect_index;
     }
 }
-constexpr bool Font::IsDisplayableChar(unsigned char c)
-{
-    using namespace detail;
-    return c >= FIRST_VALID_CHAR && c <= LAST_VALID_CHAR;
-}
-Font::Font(int resolution, std::filesystem::path path)
-{
-    using namespace detail;
-    FT_Library ft;
-    if (FT_Init_FreeType(&ft))
-    {
-        std::cout << "quickdraw::FontAtlas::FontAtlas Failed to initalize FreeType\n";
-        return;
-    }
-    std::string path_str = path.generic_string();
-    FT_Face face;
-    if (FT_New_Face(ft, path_str.c_str(), 0, &face))
-    {
-        std::cout << "quickdraw::Font::Font Failed to load " << path << '\n';
-        return;
-    }
-    FT_Set_Pixel_Sizes(face, 0, resolution);
-
-    std::vector<GLubyte> glyph_bitmaps[NUM_VALID_CHARS];
-    int min_atlas_area = 0;
-    // width / rows
-    float max_dist_above_baseline = 0;
-    float max_dist_below_baseline = 0;
-    // Load displayable characters
-    float ADVANCE_FAC = 1.0f / float(1 << 6);
-    for (int k = 0; k < NUM_VALID_CHARS; k++)
-    {
-        Glyph& glyph = glyphs_[k];
-        if (FT_Load_Char(face, k + FIRST_VALID_CHAR, FT_LOAD_RENDER))
-        {
-            std::cout << "quickdraw::FontAtlas::FontAtlas Failed to load \'" << (char)(k + FIRST_VALID_CHAR) << "\'\n";
-            return;
-        }
-        // Note we set up the glyph uv's later.
-        glyph.size = Vec2(face->glyph->bitmap.width, face->glyph->bitmap.rows);
-        glyph.bearing = Vec2(face->glyph->bitmap_left, face->glyph->bitmap_top);
-        glyph.advance = face->glyph->advance.x * ADVANCE_FAC; // If text quads are positioned incorrectly its probably this
-        min_atlas_area += glyph.size.x * glyph.size.y;
-        space_glyph_width_ += glyph.size.x; // will be average of displayable character widths
-        centering_offset_ += -glyph.bearing.y + glyph.size.y * 0.5f; // try with just bearing next time
-        max_dist_above_baseline = std::max(max_dist_above_baseline, glyph.bearing.y);
-        max_dist_below_baseline = std::max(max_dist_below_baseline, glyph.size.y - glyph.bearing.y);
-
-        std::vector<GLubyte> bitmap(glyph.size.x * NUM_PIXEL_CHANNELS * glyph.size.y);
-        for (int x = 0; x < glyph.size.x; x++)
-        {
-            for (int y = 0; y < glyph.size.y; y++)
-            {
-                bitmap[(x + y * glyph.size.x) * NUM_PIXEL_CHANNELS + 0] = 255;
-                bitmap[(x + y * glyph.size.x) * NUM_PIXEL_CHANNELS + 1] = 255;
-                bitmap[(x + y * glyph.size.x) * NUM_PIXEL_CHANNELS + 2] = 255;
-                bitmap[(x + y * glyph.size.x) * NUM_PIXEL_CHANNELS + 3] = face->glyph->bitmap.buffer[x + y * (int)glyph.size.x];
-            }
-        }
-
-        glyph.texture = LoadTexture(glyph.size.x, glyph.size.y, bitmap).first;
-        if (glyph.texture == nullptr)
-        {
-            std::cout << "quickdraw::FontAtlas::FontAtlas Failed to load \'" << path << "\'\n";
-            return;
-        }
-    }
-
-    // Set fields
-    space_glyph_width_ /= NUM_VALID_CHARS; // is the average of displayable character widths
-    centering_offset_ /= NUM_VALID_CHARS;
-    max_text_height_ = max_dist_above_baseline + max_dist_below_baseline;
-
-    // Apply import scale
-    float font_import_scale = 1.0f / resolution;
-    for (Glyph& g : glyphs_)
-    {
-        g.size *= font_import_scale;
-        g.bearing *= font_import_scale;
-        g.advance *= font_import_scale;
-    }
-    space_glyph_width_ *= font_import_scale;
-    max_text_height_ *= font_import_scale;
-    centering_offset_ *= font_import_scale;
-
-    // Cleanup
-    FT_Done_Face(face);
-    FT_Done_FreeType(ft);
-    ready_to_use_ = true;
-}
 } // namespace detail
 bool Init(const std::string& name, const Vec2& size)
 {
@@ -1487,6 +1505,7 @@ void DrawFrame()
     glBindTexture(GL_TEXTURE_2D, texture_atlas_handle);
     glBindVertexArray(quad_vao);
     glUseProgram(shader_handle);
+
     const size_t num_verts_this_frame = vertex_dynamic_attribs_to_draw.size();
     const size_t num_quads_this_frame = num_verts_this_frame / VERTS_PER_QUAD;
     const bool more_vertex_memory_needed = num_quads_this_frame > most_quads_drawn;
@@ -1537,8 +1556,7 @@ void DrawFrame()
     vertex_dynamic_attribs_to_draw.clear();
     glfwSwapBuffers(glfw_window_handle);
     glClearColor(background_color.r, background_color.g, background_color.b, 1.0f);
-    glClearDepth(0);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT);
 }
 bool ShouldClose()
 {
@@ -1589,7 +1607,7 @@ Vec2 ViewportSize()
     using namespace detail;
     return viewport_size;
 }
-int FrameNumber()
+size_t FrameNumber()
 {
     using namespace detail;
     return frame_number;
