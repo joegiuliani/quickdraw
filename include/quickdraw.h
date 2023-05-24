@@ -1,4 +1,5 @@
 #pragma once
+#define NOMINMAX
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #define STB_RECT_PACK_IMPLEMENTATION
@@ -8,10 +9,6 @@
 #include "glad\glad.h"
 #include "GLFW\glfw3native.h"
 #include "GLFW\glfw3.h"
-#include "glm\glm.hpp"
-#include "glm\geometric.hpp"
-#include "glm\vec2.hpp"
-#include "glm\vec4.hpp"
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -22,7 +19,6 @@
 #include <memory>
 #include <functional>
 
-// FORWARD DECLARATIONS
 namespace quickdraw
 {
 constexpr int KEY_UNKNOWN = GLFW_KEY_UNKNOWN;
@@ -189,15 +185,242 @@ enum MouseButton
     RIGHT = GLFW_MOUSE_BUTTON_RIGHT,
     MIDDLE = GLFW_MOUSE_BUTTON_MIDDLE,
 };
-
-// - Channel type: float
-// - Range: [0,1]
-using RGBA = glm::vec<NUM_PIXEL_CHANNELS, float, glm::packed_highp>;
-// - 2 float components x and y
-// - Vec2(0,0) is the top-left pixel of the window
-using Vec2 = glm::vec<2, float, glm::packed_highp>;
 using TextureHandle = void*;
 using FontHandle = void*;
+struct Vec2
+{
+    float x, y;
+    Vec2() :x(0), y(0)
+    {
+
+    }
+    Vec2(float xy_val) :x(xy_val), y(xy_val)
+    {
+
+    }
+    Vec2(float x_val, float y_val) :x(x_val), y(y_val)
+    {
+
+    }
+    Vec2(const Vec2& other) :x(other.x), y(other.y)
+    {
+    }
+    Vec2& operator=(const Vec2& rhs)
+    {
+        x = rhs.x;
+        y = rhs.y;
+        return *this;
+    }
+    bool operator==(const Vec2& rhs) const
+    {
+        return x == rhs.x && y == rhs.y;
+    }
+    bool operator!=(const Vec2& rhs) const
+    {
+        return !operator==(rhs);
+    }
+    Vec2 operator-() const
+    {
+        return Vec2(-x, -y);
+    }
+#define QUICKDRAW_VEC2_INEQUALITY_OPERATOR_DEF(op)\
+	Vec2 operator op(const Vec2& rhs) const\
+	{\
+		return x op rhs.x && y op rhs.y;\
+	}
+    QUICKDRAW_VEC2_INEQUALITY_OPERATOR_DEF(> )
+        QUICKDRAW_VEC2_INEQUALITY_OPERATOR_DEF(< )
+        QUICKDRAW_VEC2_INEQUALITY_OPERATOR_DEF(>= )
+        QUICKDRAW_VEC2_INEQUALITY_OPERATOR_DEF(<= )
+#define QUICKDRAW_VEC2_VEC2_ARITHMETIC_OPERATOR_DEF(op)\
+	Vec2 operator op(const Vec2& rhs) const\
+	{\
+		return Vec2(x op rhs.x, y op rhs.y);\
+	}
+        QUICKDRAW_VEC2_VEC2_ARITHMETIC_OPERATOR_DEF(+)
+        QUICKDRAW_VEC2_VEC2_ARITHMETIC_OPERATOR_DEF(-)
+        QUICKDRAW_VEC2_VEC2_ARITHMETIC_OPERATOR_DEF(*)
+        QUICKDRAW_VEC2_VEC2_ARITHMETIC_OPERATOR_DEF(/ )
+#define QUICKDRAW_VEC2_FLOAT_ARITHMETIC_OPERATOR_DEF(op)\
+	Vec2 operator op(float rhs) const\
+	{\
+		return Vec2(x op rhs, y op rhs);\
+	}
+        QUICKDRAW_VEC2_FLOAT_ARITHMETIC_OPERATOR_DEF(+)
+        QUICKDRAW_VEC2_FLOAT_ARITHMETIC_OPERATOR_DEF(-)
+        QUICKDRAW_VEC2_FLOAT_ARITHMETIC_OPERATOR_DEF(*)
+        QUICKDRAW_VEC2_FLOAT_ARITHMETIC_OPERATOR_DEF(/ )
+#define QUICKDRAW_VEC2_VEC2_COMPOUND_OPERATOR_DEF(op)\
+	Vec2& operator op(const Vec2& rhs)\
+	{\
+		x op rhs.x;\
+		y op rhs.y;\
+		return *this;\
+	}
+        QUICKDRAW_VEC2_VEC2_COMPOUND_OPERATOR_DEF(+= )
+        QUICKDRAW_VEC2_VEC2_COMPOUND_OPERATOR_DEF(-= )
+        QUICKDRAW_VEC2_VEC2_COMPOUND_OPERATOR_DEF(*= )
+        QUICKDRAW_VEC2_VEC2_COMPOUND_OPERATOR_DEF(/= )
+#define QUICKDRAW_VEC2_FLOAT_COMPOUND_OPERATOR_DEF(op)\
+	Vec2& operator op(float rhs)\
+	{\
+		x op rhs;\
+		y op rhs;\
+		return *this;\
+	}
+        QUICKDRAW_VEC2_FLOAT_COMPOUND_OPERATOR_DEF(+= )
+        QUICKDRAW_VEC2_FLOAT_COMPOUND_OPERATOR_DEF(-= )
+        QUICKDRAW_VEC2_FLOAT_COMPOUND_OPERATOR_DEF(*= )
+        QUICKDRAW_VEC2_FLOAT_COMPOUND_OPERATOR_DEF(/= )
+        void normalize()
+    {
+        operator/=(length());
+    }
+    float length() const
+    {
+        return sqrtf(dot(*this, *this));
+    }
+    Vec2 normal() const
+    {
+        return Vec2(y, -x);
+    }
+    static float dot(const Vec2& a, const Vec2& b)
+    {
+        return a.x * b.x + a.y * b.y;
+    }
+    template<typename AmountType>
+    // - a + (b - a) * amount
+    static Vec2 mix(const Vec2& a, const Vec2& b, const AmountType& amount)
+    {
+        return a + (b - a) * amount;
+    }
+    static float distance(const Vec2& a, const Vec2& b)
+    {
+        return (b - a).length();
+    }
+};
+Vec2 operator+(float lhs, const Vec2& rhs)
+{
+    return rhs + lhs;
+}
+Vec2 operator-(float lhs, const Vec2& rhs)
+{
+    return Vec2(lhs - rhs.x, lhs - rhs.y);
+}
+Vec2 operator*(float lhs, const Vec2& rhs)
+{
+    return rhs * lhs;
+}
+Vec2 operator/(float lhs, const Vec2& rhs)
+{
+    return Vec2(lhs / rhs.x, lhs / rhs.y);
+}
+struct RGBA
+{
+    float r, g, b, a;
+    RGBA() :r(0), g(0), b(0), a(0)
+    {
+
+    }
+    RGBA(float rgba_val) :r(rgba_val), g(rgba_val), b(rgba_val), a(rgba_val)
+    {
+
+    }
+    RGBA(float red, float green, float blue, float alpha) :r(red), g(green), b(blue), a(alpha)
+    {
+
+    }
+    RGBA(const RGBA& other) :r(other.r), g(other.g), b(other.b), a(other.a)
+    {
+    }
+    RGBA& operator=(const RGBA& rhs)
+    {
+        r = rhs.r;
+        g = rhs.g;
+        b = rhs.b;
+        a = rhs.a;
+        return *this;
+    }
+    bool operator==(const RGBA& rhs) const
+    {
+        return r == rhs.r && g == rhs.g && b == rhs.b && a == rhs.a;
+    }
+    bool operator!=(const RGBA& rhs) const
+    {
+        return !operator==(rhs);
+    }
+    RGBA operator-() const
+    {
+        return RGBA(-r, -g, -b, -a);
+    }
+#define QUICKDRAW_RGBA_RGBA_ARITHMETIC_OPERATOR_DEF(op)\
+	RGBA operator op(const RGBA& rhs) const\
+	{\
+		return RGBA(r op rhs.r, g op rhs.g, b op rhs.b, a op rhs.a);\
+	}
+    QUICKDRAW_RGBA_RGBA_ARITHMETIC_OPERATOR_DEF(+)
+        QUICKDRAW_RGBA_RGBA_ARITHMETIC_OPERATOR_DEF(-)
+        QUICKDRAW_RGBA_RGBA_ARITHMETIC_OPERATOR_DEF(*)
+        QUICKDRAW_RGBA_RGBA_ARITHMETIC_OPERATOR_DEF(/ )
+#define QUICKDRAW_RGBA_FLOAT_ARITHMETIC_OPERATOR_DEF(op)\
+	RGBA operator op(float rhs) const\
+	{\
+		return RGBA(r op rhs,g op rhs,b op rhs,a op rhs);\
+	}
+        QUICKDRAW_RGBA_FLOAT_ARITHMETIC_OPERATOR_DEF(+)
+        QUICKDRAW_RGBA_FLOAT_ARITHMETIC_OPERATOR_DEF(-)
+        QUICKDRAW_RGBA_FLOAT_ARITHMETIC_OPERATOR_DEF(*)
+        QUICKDRAW_RGBA_FLOAT_ARITHMETIC_OPERATOR_DEF(/ )
+#define QUICKDRAW_RGBA_RGBA_COMPOUND_OPERATOR_DEF(op)\
+	RGBA& operator op(const RGBA& rhs)\
+	{\
+		r op rhs.r;\
+		g op rhs.g;\
+		b op rhs.b;\
+		a op rhs.a;\
+		return *this;\
+	}
+        QUICKDRAW_RGBA_RGBA_COMPOUND_OPERATOR_DEF(+= )
+        QUICKDRAW_RGBA_RGBA_COMPOUND_OPERATOR_DEF(-= )
+        QUICKDRAW_RGBA_RGBA_COMPOUND_OPERATOR_DEF(*= )
+        QUICKDRAW_RGBA_RGBA_COMPOUND_OPERATOR_DEF(/= )
+#define QUICKDRAW_RGBA_FLOAT_COMPOUND_OPERATOR_DEF(op)\
+	RGBA& operator op(float rhs)\
+	{\
+		r op rhs;\
+		g op rhs;\
+		b op rhs;\
+		a op rhs;\
+		return *this;\
+	}
+        QUICKDRAW_RGBA_FLOAT_COMPOUND_OPERATOR_DEF(+= )
+        QUICKDRAW_RGBA_FLOAT_COMPOUND_OPERATOR_DEF(-= )
+        QUICKDRAW_RGBA_FLOAT_COMPOUND_OPERATOR_DEF(*= )
+        QUICKDRAW_RGBA_FLOAT_COMPOUND_OPERATOR_DEF(/= )
+
+        template<typename AmountType>
+    // - a + (b - a) * amount
+    static RGBA mix(const RGBA& a, const RGBA& b, const AmountType& amount)
+    {
+        return a + (b - a) * amount;
+    }
+};
+RGBA operator+(float lhs, const RGBA& rhs)
+{
+    return rhs + lhs;
+}
+RGBA operator-(float lhs, const RGBA& rhs)
+{
+    return RGBA(lhs - rhs.r, lhs - rhs.g, lhs - rhs.b, lhs - rhs.a);
+}
+RGBA operator*(float lhs, const RGBA& rhs)
+{
+    return rhs * lhs;
+}
+RGBA operator/(float lhs, const RGBA& rhs)
+{
+    return RGBA(lhs / rhs.r, lhs / rhs.g, lhs / rhs.b, lhs / rhs.a);
+}
 struct MouseSnapshot
 {
     bool is_down[NUM_MOUSE_BUTTONS] = { false };
@@ -874,7 +1097,8 @@ void WindowSizeCallback(GLFWwindow* window_ptr, int width, int height)
 
     glUseProgram(shader_handle);
     Vec2 transform = Vec2(1.0f / (viewport_size - 1.0f));
-    glUniform2fv(transform_handle, 1, &transform[0]);
+    float arr[2] = { transform.x, transform.y };
+    glUniform2fv(transform_handle, 1, &arr[0]);
 
     QUICKDRAW_NOTIFY_OBSERVERS(WindowObserver, window_observers, on_window_resize(CopyWindowState()));
 }
@@ -1023,7 +1247,7 @@ void DrawQuad()
 }
 Vec2 Normal(const Vec2& slope)
 {
-    return Vec2(slope.y, -slope.x) / glm::length(slope);
+    return Vec2(slope.y, -slope.x) / slope.length();
 }
 std::pair<TextureHandle, Vec2> LoadTexture(int width, int height, std::vector<GLubyte> rgba_bitmap)
 {
@@ -1427,10 +1651,10 @@ void DrawText(const Vec2& pos, const std::string& text)
         Glyph& glyph = *active_font->get(c);
         Vec2 glyph_draw_pos = pos + curr_text_scale * Vec2(x_cursor + glyph.bearing.x, -glyph.bearing.y - active_font->centering_offset());
         Vec2 glyph_draw_size = curr_text_scale * glyph.size;
-        curr_vertex_attribs[UPPER_START].fill_color = glm::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, (glyph_draw_pos.x - pos.x) / text_width);
-        curr_vertex_attribs[UPPER_END].fill_color = glm::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, (glyph_draw_pos.x + glyph_draw_size.x - pos.x) / text_width);
-        curr_vertex_attribs[LOWER_START].fill_color = glm::mix(saved_vertex_attribs[LOWER_START].fill_color, saved_vertex_attribs[LOWER_END].fill_color, (glyph_draw_pos.x - pos.x) / text_width);
-        curr_vertex_attribs[LOWER_END].fill_color = glm::mix(saved_vertex_attribs[LOWER_START].fill_color, saved_vertex_attribs[LOWER_END].fill_color, (glyph_draw_pos.x + glyph_draw_size.x - pos.x) / text_width);
+        curr_vertex_attribs[UPPER_START].fill_color = RGBA::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, (glyph_draw_pos.x - pos.x) / text_width);
+        curr_vertex_attribs[UPPER_END].fill_color = RGBA::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, (glyph_draw_pos.x + glyph_draw_size.x - pos.x) / text_width);
+        curr_vertex_attribs[LOWER_START].fill_color = RGBA::mix(saved_vertex_attribs[LOWER_START].fill_color, saved_vertex_attribs[LOWER_END].fill_color, (glyph_draw_pos.x - pos.x) / text_width);
+        curr_vertex_attribs[LOWER_END].fill_color = RGBA::mix(saved_vertex_attribs[LOWER_START].fill_color, saved_vertex_attribs[LOWER_END].fill_color, (glyph_draw_pos.x + glyph_draw_size.x - pos.x) / text_width);
         DrawTexture(glyph.texture, glyph_draw_pos, glyph_draw_size);
 
         // Advance the horizontal cursor to the drawing position of the next
@@ -1470,8 +1694,6 @@ void DrawPath(const std::vector<Vec2>& points, float thickness, const Vec2& offs
         return;
     }
 
-    // This method draws quads as line segments along a path
-
     curr_quad_attribs[2] = thickness;
     SetQuadMode(PATH_MODE);
     DynamicVertexAttribs saved_vertex_attribs[4];
@@ -1489,11 +1711,10 @@ void DrawPath(const std::vector<Vec2>& points, float thickness, const Vec2& offs
     length_at_point.push_back(0);
     for (size_t k = 0; k < points.size() - 1; k++)
     {
-        float segment_length = glm::distance(points[k], points[k + 1]);
+        float segment_length = Vec2::distance(points[k], points[k + 1]);
         path_length += segment_length;
         length_at_point.push_back(path_length);
     }
-
 
     // Calculate the normal of the previous, current, and next line
     Vec2 line_normal = Normal(points[1] - points[0]);
@@ -1517,22 +1738,21 @@ void DrawPath(const std::vector<Vec2>& points, float thickness, const Vec2& offs
 
     // Set edge data
     curr_vertex_attribs[UPPER_START].pos = start_edge_slope + points[0] + offset;
-    curr_vertex_attribs[UPPER_START].fill_color = glm::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, length_at_point[0] / path_length);
-    curr_vertex_attribs[UPPER_START].outline_color = glm::mix(saved_vertex_attribs[UPPER_START].outline_color, saved_vertex_attribs[UPPER_END].outline_color, length_at_point[0] / path_length);
+    curr_vertex_attribs[UPPER_START].fill_color = RGBA::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, length_at_point[0] / path_length);
+    curr_vertex_attribs[UPPER_START].outline_color = RGBA::mix(saved_vertex_attribs[UPPER_START].outline_color, saved_vertex_attribs[UPPER_END].outline_color, length_at_point[0] / path_length);
 
     curr_vertex_attribs[UPPER_END].pos = end_edge_slope + points[1] + offset;
-    curr_vertex_attribs[UPPER_END].fill_color = glm::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, length_at_point[1] / path_length);
-    curr_vertex_attribs[UPPER_END].outline_color = glm::mix(saved_vertex_attribs[UPPER_START].outline_color, saved_vertex_attribs[UPPER_END].outline_color, length_at_point[1] / path_length);
+    curr_vertex_attribs[UPPER_END].fill_color = RGBA::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, length_at_point[1] / path_length);
+    curr_vertex_attribs[UPPER_END].outline_color = RGBA::mix(saved_vertex_attribs[UPPER_START].outline_color, saved_vertex_attribs[UPPER_END].outline_color, length_at_point[1] / path_length);
 
     curr_vertex_attribs[LOWER_END].pos = -end_edge_slope + points[1] + offset;
-    curr_vertex_attribs[LOWER_END].fill_color = glm::mix(saved_vertex_attribs[LOWER_START].fill_color, saved_vertex_attribs[LOWER_END].fill_color, length_at_point[1] / path_length);
-    curr_vertex_attribs[LOWER_END].outline_color = glm::mix(saved_vertex_attribs[LOWER_START].outline_color, saved_vertex_attribs[LOWER_END].outline_color, length_at_point[1] / path_length);
+    curr_vertex_attribs[LOWER_END].fill_color = RGBA::mix(saved_vertex_attribs[LOWER_START].fill_color, saved_vertex_attribs[LOWER_END].fill_color, length_at_point[1] / path_length);
+    curr_vertex_attribs[LOWER_END].outline_color = RGBA::mix(saved_vertex_attribs[LOWER_START].outline_color, saved_vertex_attribs[LOWER_END].outline_color, length_at_point[1] / path_length);
 
     curr_vertex_attribs[LOWER_START].pos = -start_edge_slope + points[0] + offset;
-    curr_vertex_attribs[LOWER_START].fill_color = glm::mix(saved_vertex_attribs[LOWER_START].fill_color, saved_vertex_attribs[LOWER_END].fill_color, length_at_point[0] / path_length);
-    curr_vertex_attribs[LOWER_START].outline_color = glm::mix(saved_vertex_attribs[LOWER_START].outline_color, saved_vertex_attribs[LOWER_END].outline_color, length_at_point[0] / path_length);
+    curr_vertex_attribs[LOWER_START].fill_color = RGBA::mix(saved_vertex_attribs[LOWER_START].fill_color, saved_vertex_attribs[LOWER_END].fill_color, length_at_point[0] / path_length);
+    curr_vertex_attribs[LOWER_START].outline_color = RGBA::mix(saved_vertex_attribs[LOWER_START].outline_color, saved_vertex_attribs[LOWER_END].outline_color, length_at_point[0] / path_length);
 
-    // draw the quad
     DrawQuad();
 
     if (points.size() > 2)
@@ -1557,12 +1777,12 @@ void DrawPath(const std::vector<Vec2>& points, float thickness, const Vec2& offs
 
             // Set the end edge data
             curr_vertex_attribs[UPPER_END].pos = end_edge_slope + points[k + 1] + offset;
-            curr_vertex_attribs[UPPER_END].fill_color = glm::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, length_at_point[k + 1] / path_length);
-            curr_vertex_attribs[UPPER_END].outline_color = glm::mix(saved_vertex_attribs[UPPER_START].outline_color, saved_vertex_attribs[UPPER_END].outline_color, length_at_point[k + 1] / path_length);
+            curr_vertex_attribs[UPPER_END].fill_color = RGBA::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, length_at_point[k + 1] / path_length);
+            curr_vertex_attribs[UPPER_END].outline_color = RGBA::mix(saved_vertex_attribs[UPPER_START].outline_color, saved_vertex_attribs[UPPER_END].outline_color, length_at_point[k + 1] / path_length);
 
             curr_vertex_attribs[LOWER_END].pos = -end_edge_slope + points[k + 1] + offset;
-            curr_vertex_attribs[LOWER_END].fill_color = glm::mix(saved_vertex_attribs[LOWER_START].fill_color, saved_vertex_attribs[LOWER_END].fill_color, length_at_point[k + 1] / path_length);
-            curr_vertex_attribs[LOWER_END].outline_color = glm::mix(saved_vertex_attribs[LOWER_START].outline_color, saved_vertex_attribs[LOWER_END].outline_color, length_at_point[k + 1] / path_length);
+            curr_vertex_attribs[LOWER_END].fill_color = RGBA::mix(saved_vertex_attribs[LOWER_START].fill_color, saved_vertex_attribs[LOWER_END].fill_color, length_at_point[k + 1] / path_length);
+            curr_vertex_attribs[LOWER_END].outline_color = RGBA::mix(saved_vertex_attribs[LOWER_START].outline_color, saved_vertex_attribs[LOWER_END].outline_color, length_at_point[k + 1] / path_length);
 
             DrawQuad();
             k++;
@@ -1573,11 +1793,11 @@ void DrawPath(const std::vector<Vec2>& points, float thickness, const Vec2& offs
         curr_vertex_attribs[UPPER_START] = curr_vertex_attribs[UPPER_END];
         curr_vertex_attribs[LOWER_START] = curr_vertex_attribs[LOWER_END];
         curr_vertex_attribs[UPPER_END].pos = end_edge_slope + points[k + 1] + offset;
-        curr_vertex_attribs[UPPER_END].fill_color = glm::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, length_at_point[k + 1] / path_length);
-        curr_vertex_attribs[UPPER_END].outline_color = glm::mix(saved_vertex_attribs[UPPER_START].outline_color, saved_vertex_attribs[UPPER_END].outline_color, length_at_point[k + 1] / path_length);
+        curr_vertex_attribs[UPPER_END].fill_color = RGBA::mix(saved_vertex_attribs[UPPER_START].fill_color, saved_vertex_attribs[UPPER_END].fill_color, length_at_point[k + 1] / path_length);
+        curr_vertex_attribs[UPPER_END].outline_color = RGBA::mix(saved_vertex_attribs[UPPER_START].outline_color, saved_vertex_attribs[UPPER_END].outline_color, length_at_point[k + 1] / path_length);
         curr_vertex_attribs[LOWER_END].pos = -end_edge_slope + points[k + 1] + offset;
-        curr_vertex_attribs[LOWER_END].fill_color = glm::mix(saved_vertex_attribs[LOWER_START].fill_color, saved_vertex_attribs[LOWER_END].fill_color, length_at_point[k + 1] / path_length);
-        curr_vertex_attribs[LOWER_END].outline_color = glm::mix(saved_vertex_attribs[LOWER_START].outline_color, saved_vertex_attribs[LOWER_END].outline_color, length_at_point[k + 1] / path_length);
+        curr_vertex_attribs[LOWER_END].fill_color = RGBA::mix(saved_vertex_attribs[LOWER_START].fill_color, saved_vertex_attribs[LOWER_END].fill_color, length_at_point[k + 1] / path_length);
+        curr_vertex_attribs[LOWER_END].outline_color = RGBA::mix(saved_vertex_attribs[LOWER_START].outline_color, saved_vertex_attribs[LOWER_END].outline_color, length_at_point[k + 1] / path_length);
 
         DrawQuad();
     }
@@ -1740,22 +1960,3 @@ FontHandle LoadFont(int resolution, std::filesystem::path path)
     return &new_font;
 }
 }
-
-#ifndef QUICKDRAW_DISBALE_VEC2_INEQUALITY_OPERATORS
-bool operator<(const quickdraw::Vec2& lhs, const quickdraw::Vec2& rhs)
-{
-    return lhs.x < rhs.x && lhs.y < rhs.y;
-}
-bool operator>(const quickdraw::Vec2& lhs, const quickdraw::Vec2& rhs)
-{
-    return lhs.x > rhs.x && lhs.y > rhs.y;
-}
-bool operator<=(const quickdraw::Vec2& lhs, const quickdraw::Vec2& rhs)
-{
-    return lhs.x <= rhs.x && lhs.y <= rhs.y;
-}
-bool operator>=(const quickdraw::Vec2& lhs, const quickdraw::Vec2& rhs)
-{
-    return lhs.x >= rhs.x && lhs.y >= rhs.y;
-}
-#endif
