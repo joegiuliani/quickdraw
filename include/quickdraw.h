@@ -1287,7 +1287,7 @@ MouseSnapshot CopyMouseState()
     }
     for (int b = 0; b < NUM_MOUSE_BUTTONS; b++)
     {
-        mouse.is_down[b] = mouse_button_states[b].current() == UP && mouse_button_states[b].previous() == DOWN;
+        mouse.is_released[b] = mouse_button_states[b].current() == UP && mouse_button_states[b].previous() == DOWN;
     }
     mouse.is_moving = mouse_delta != Vec2(0);
     mouse.delta = mouse_delta;
